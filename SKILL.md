@@ -112,10 +112,12 @@ For data points not found: `proxy_clear_traffic()`, interact (scroll, click), `h
 Scroll the entire page before API sniffing to capture lazy-loaded API calls:
 
 1. `proxy_clear_traffic()`
-2. Repeat 5-6x: `humanizer_scroll(target_id, delta_y: 800)` + `humanizer_idle(target_id, 1500)`
-3. `humanizer_idle(target_id, 3000)` — let deferred calls complete
-4. `interceptor_chrome_devtools_screenshot()` + `interceptor_chrome_devtools_snapshot()` (FULL_MODE only)
-5. `proxy_list_traffic()` — review newly triggered API calls
+2. Scroll 2-3x: `humanizer_scroll(target_id, delta_y: 800)` + `humanizer_idle(target_id, 1500)`
+3. **Mid-scroll visual check** (FULL_MODE only): `interceptor_chrome_devtools_screenshot()` — inspect for interstitials (CAPTCHA, cookie consent, PX challenge, modals). If an overlay is detected, dismiss it (`humanizer_click` on the dismiss selector, then `humanizer_idle`) before continuing. If a hard block (CAPTCHA) is detected, stop scrolling and proceed to Step 3 with traffic captured so far.
+4. Scroll 2-3x more: `humanizer_scroll(target_id, delta_y: 800)` + `humanizer_idle(target_id, 1500)`
+5. `humanizer_idle(target_id, 3000)` — let deferred calls complete
+6. `interceptor_chrome_devtools_screenshot()` + `interceptor_chrome_devtools_snapshot()` (FULL_MODE only) — final state
+7. `proxy_list_traffic()` — review newly triggered API calls
 
 **MANDATORY** even if all data points already found — lazy APIs often provide better-structured data.
 
