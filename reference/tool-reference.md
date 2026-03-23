@@ -12,8 +12,8 @@ Reference material for the intel-agent skill. Consult when you need tool signatu
 - `proxy_get_exchange(exchange_id)` returns `bodyPreview` which is truncated for large responses
 - Always compare `bodySize` to the actual preview length; if `bodySize` significantly exceeds the preview, the preview is incomplete
 - **A search returning 0 results does NOT prove the content is absent from the full response**
-- Mitigation: use `proxy_get_session_exchange(session_id, exchange_id: exchange_id, include_body: true)` to access full **decompressed** bodies from a persisted session (brotli/gzip/deflate are auto-decompressed)
-- Mitigation: use `proxy_query_session(session_id, text: "search term")` for full-text search across persisted session data (full bodies when `capture_profile: "full"`)
+- Mitigation: use `proxy_search_session_bodies(session_id, text: "search term")` to search **decompressed** full bodies with grep-like context snippets. Pre-filter by hostname, content-type, status code to narrow the search.
+- Mitigation: use `proxy_get_session_exchange(session_id, exchange_id, include_body: true)` to retrieve one full decompressed body from a persisted session
 - If neither full body nor rendered DOM snapshot is available, mark the finding as **INCONCLUSIVE — body truncated, no snapshot available**
 
 ### DevTools sidecar dependency
@@ -26,9 +26,10 @@ Reference material for the intel-agent skill. Consult when you need tool signatu
 ### Live traffic search vs session search
 
 - `proxy_search_traffic()` operates on the live **in-memory** traffic buffer (preview only, cleared by `proxy_clear_traffic()`)
-- `proxy_query_session()` operates on the **persisted on-disk** session (full bodies when `capture_profile` is `"full"`)
-- For authoritative body searches, prefer session queries over live traffic searches
-- Always start a session with `capture_profile: "full"` in Step 1 to enable this
+- `proxy_query_session()` searches session **metadata** (URL, hostname, path) — it does NOT search inside body content
+- `proxy_search_session_bodies()` searches **decompressed full bodies** in the persisted session — this is the authoritative body search tool
+- For finding text inside HTML/JSON response bodies, always use `proxy_search_session_bodies()`
+- Always start a session with `capture_profile: "full"` in Step 1 to enable full body search
 
 ---
 
@@ -54,8 +55,9 @@ Reference material for the intel-agent skill. Consult when you need tool signatu
 ### Traffic Analysis (Persisted Session)
 | Tool | Purpose |
 |------|---------|
-| `proxy_query_session(session_id, text, url_contains, ...)` | Query session with full-text search (**searches full bodies**) |
-| `proxy_get_session_exchange(session_id, exchange_id, include_body)` | Get full exchange from session (**full body when capture_profile is "full"**) |
+| `proxy_query_session(session_id, text, url_contains, ...)` | Query session by **metadata** (URL, hostname, path) — does NOT search body content |
+| `proxy_search_session_bodies(session_id, text, ...)` | **Full-text search inside response/request bodies** — decompresses and searches with grep-like context snippets. Pre-filter by hostname, content-type, status code. This is the authoritative body search tool. |
+| `proxy_get_session_exchange(session_id, exchange_id, include_body)` | Get full exchange from session (**full decompressed body when capture_profile is "full"**) |
 
 ### Browser Inspection
 | Tool | Purpose |
@@ -97,4 +99,4 @@ Reference material for the intel-agent skill. Consult when you need tool signatu
 - Always use `stealthMode: true` when launching Chrome
 - Always `proxy_clear_traffic()` before an interaction to isolate the traffic it generates
 - Always start session recording in Step 1 with `capture_profile: "full"` — this is the only way to get full response bodies for authoritative searches
-- Use `proxy_query_session()` instead of `proxy_search_traffic()` when you need to search full bodies (not just previews)
+- Use `proxy_search_session_bodies()` to search inside response/request bodies (not `proxy_search_traffic()` which only searches previews, and not `proxy_query_session()` which only searches metadata)

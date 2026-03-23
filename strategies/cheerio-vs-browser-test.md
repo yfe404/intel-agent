@@ -34,7 +34,8 @@ Save the response body for searching. This is what Cheerio would see — no Java
 **Body truncation check**: `proxy_get_exchange()` returns a `bodyPreview` which may be truncated for large responses. Compare `bodySize` in the exchange metadata to the actual preview length.
 
 - If `bodySize` significantly exceeds the preview length: the preview only covers a portion of the HTML (often just `<head>` and beginning of `<body>`). **Searches of this preview are incomplete.**
-- To get the full body: use `proxy_get_session_exchange(session_id, exchange_id: exchange_id, include_body: true)` if a session was started with `capture_profile: "full"`.
+- To search the full body: use `proxy_search_session_bodies(session_id, text: "search term", content_type_contains: "html")` which decompresses and searches the complete body, returning context snippets around matches.
+- To retrieve the full body of a specific exchange: use `proxy_get_session_exchange(session_id, exchange_id: exchange_id, include_body: true)`.
 - If the full body is unavailable: note that raw HTML search results are **partial** and defer authoritative presence/absence decisions to the rendered DOM snapshot (step 2). A search returning 0 results on a truncated body does NOT mean the data is absent.
 
 ### 2. Get Rendered DOM
@@ -192,7 +193,7 @@ When the body preview is truncated but the rendered DOM snapshot IS available:
 - Use the rendered DOM as the **authoritative** check for "is the data point on the page"
 - If found in rendered DOM: it exists on the page (method: Browser, but may also be extractable via Cheerio from the full HTML)
 - If NOT in rendered DOM: genuinely absent from the page at load time (may still require interaction — go to step above)
-- To determine if Cheerio works for DOM-found data points: retrieve the full body from the session via `proxy_get_session_exchange(session_id, exchange_id, include_body: true)` and re-check
+- To determine if Cheerio works for DOM-found data points: use `proxy_search_session_bodies(session_id, text: "[value]", content_type_contains: "html")` to check if the value exists in the raw HTML body
 
 ### Truncated Body + No Rendered DOM → INCONCLUSIVE
 

@@ -76,7 +76,7 @@ proxy_list_traffic(url_filter: "[target domain]")
 proxy_get_exchange(exchange_id)   # main HTML document
 ```
 
-**Body truncation**: If `bodySize` >> preview length, use `proxy_get_session_exchange(session_id, exchange_id, include_body: true)` or `proxy_query_session(session_id, text: "...")` for full body. See `reference/tool-reference.md` Known Limitations. If body is truncated and no full body available, defer to Step 2c or mark **INCONCLUSIVE**.
+**Body truncation**: If `bodySize` >> preview length, use `proxy_search_session_bodies(session_id, text: "...", content_type_contains: "html")` to search the full decompressed body. For retrieving the complete body of a specific exchange, use `proxy_get_session_exchange(session_id, exchange_id, include_body: true)`. See `reference/tool-reference.md` Known Limitations. If body is truncated and no full body available, defer to Step 2c or mark **INCONCLUSIVE**.
 
 Search for data point values. If found → **Cheerio works**.
 
