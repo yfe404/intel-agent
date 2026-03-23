@@ -44,11 +44,12 @@ Six steps, executed sequentially. Each step builds on the previous.
 ### Step 1: Initialize & Capture Baseline Traffic
 
 ```
-proxy_start(persistence_enabled: true, capture_profile: "full")
-proxy_session_start(session_name: "recon-[domain]-[YYYYMMDD]", capture_profile: "full")
+proxy_start(persistence_enabled: true, capture_profile: "full", session_name: "recon-[domain]-[YYYYMMDD]")
 interceptor_chrome_launch(url: "[target URL]", stealthMode: true)
 interceptor_chrome_devtools_attach(target_id)
 ```
+
+Note: `proxy_start` with `persistence_enabled: true` auto-starts a session. A subsequent `proxy_session_start()` will return the existing session (not error), but the cleaner pattern is to pass `session_name` directly to `proxy_start`.
 
 **1a. Capability check** — Inspect the attach response:
 - If `"native-fallback mode"` warning: try `interceptor_chrome_devtools_pull_sidecar()`, then detach + re-attach
@@ -62,7 +63,7 @@ interceptor_chrome_devtools_screenshot()   # FULL_MODE only
 
 **Record**: Session name/ID, capability mode, page load status, loading behavior (SSR vs SPA), interstitials, framework indicators.
 
-**Dismiss interstitials**: `humanizer_click(target_id, "[accept selector]")` then `humanizer_idle(target_id, 1000)`.
+**Dismiss interstitials**: Use the rendered DOM snapshot (if FULL_MODE) or screenshot to identify cookie/popup selectors. `humanizer_click(target_id, "[accept selector]")` then `humanizer_idle(target_id, 1000)`. If the first selector fails, try alternatives. Multiple popups may appear sequentially (e.g., Cloudflare challenge then cookie consent).
 
 ### Step 2: Scan Response Bodies for Data Points
 

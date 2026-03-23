@@ -12,7 +12,7 @@ Reference material for the intel-agent skill. Consult when you need tool signatu
 - `proxy_get_exchange(exchange_id)` returns `bodyPreview` which is truncated for large responses
 - Always compare `bodySize` to the actual preview length; if `bodySize` significantly exceeds the preview, the preview is incomplete
 - **A search returning 0 results does NOT prove the content is absent from the full response**
-- Mitigation: use `proxy_get_session_exchange(session_id, exchange_id: exchange_id, include_body: true)` to access full bodies from a persisted session
+- Mitigation: use `proxy_get_session_exchange(session_id, exchange_id: exchange_id, include_body: true)` to access full **decompressed** bodies from a persisted session (brotli/gzip/deflate are auto-decompressed)
 - Mitigation: use `proxy_query_session(session_id, text: "search term")` for full-text search across persisted session data (full bodies when `capture_profile: "full"`)
 - If neither full body nor rendered DOM snapshot is available, mark the finding as **INCONCLUSIVE — body truncated, no snapshot available**
 
@@ -37,8 +37,8 @@ Reference material for the intel-agent skill. Consult when you need tool signatu
 ### Initialization
 | Tool | Purpose |
 |------|---------|
-| `proxy_start(persistence_enabled, capture_profile)` | Start MITM proxy (use `persistence_enabled: true, capture_profile: "full"`) |
-| `proxy_session_start(session_name, capture_profile)` | Start persistent session recording |
+| `proxy_start(persistence_enabled, capture_profile, session_name)` | Start MITM proxy with session (use `persistence_enabled: true, capture_profile: "full"`) |
+| `proxy_session_start(session_name, capture_profile)` | Start session separately (not needed if `proxy_start` was called with `persistence_enabled: true`) |
 | `interceptor_chrome_launch(url, stealthMode: true)` | Launch stealth Chrome |
 | `interceptor_chrome_devtools_attach(target_id)` | Attach DevTools bridge |
 | `interceptor_chrome_devtools_pull_sidecar()` | Install DevTools sidecar if missing |

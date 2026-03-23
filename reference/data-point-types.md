@@ -24,6 +24,8 @@ Direct value search. Look for the exact value (or close match) in:
 - Rendered DOM text
 - API response fields
 
+**Note on price**: Price is often server-rendered only (no dedicated API) on e-commerce sites — this is common for SEO, anti-scraping, or personalization. If no price API is found after thorough traffic analysis, Cheerio extraction from SSR HTML is the expected method. Search with formatting variants (e.g., "299,-", "299,–", "299.00", "$299").
+
 ### Boolean (in stock, verified, active)
 
 Look for:
