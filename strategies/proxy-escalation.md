@@ -33,7 +33,36 @@ http://auto:[APIFY_TOKEN]@proxy.apify.com:8000
 http://groups-RESIDENTIAL,auto:[APIFY_TOKEN]@proxy.apify.com:8000
 ```
 
-If proxy credentials are not available, skip Tiers 2-3 and note in the report that protection testing was limited to direct access only.
+### When proxy credentials are NOT available
+
+Do NOT simply write "Not tested" for Tiers 2-3. Instead, perform a heuristic assessment based on observable indicators from the direct (Tier 1) session:
+
+1. **Identify the protection system** from cookies and response patterns:
+   - `cf_clearance`, `__cf_bm` → Cloudflare
+   - `datadome` → DataDome
+   - `_abck`, `ak_bmsc` → Akamai
+   - `reese84` → Imperva
+   - `_px` prefix → PerimeterX
+   - None of the above → Likely no WAF/bot protection, or custom solution
+
+2. **Estimate protection tier from the challenge type observed**:
+
+   | Observed Behavior | Likely Blocks Datacenter? | Likely Blocks Residential? | Estimated Minimum |
+   |-------------------|---------------------------|----------------------------|-------------------|
+   | No challenges, no protection cookies | No | No | Direct |
+   | JS challenge only (brief interstitial, auto-solved) | Likely yes | Likely no | Datacenter proxy |
+   | CAPTCHA challenge | Yes | Possibly | Residential proxy |
+   | CAPTCHA + behavioral analysis | Yes | Likely yes | Residential + stealth |
+   | No challenge but protection cookies present | Uncertain | Uncertain | Datacenter (actual test needed) |
+
+3. **Document in the report**:
+   - Protection system identified: [name]
+   - Observable indicators: [cookies, challenge type, response headers]
+   - Heuristic assessment: "Based on [indicators], estimated minimum proxy level is [level]"
+   - Confidence: **LOW** — actual proxy testing not performed
+   - Recommendation: "Re-run with datacenter/residential proxy credentials for definitive results"
+
+4. **Still perform the TLS fingerprint check** — it does not require proxy credentials and provides valuable data for scraper implementation.
 
 ---
 
@@ -97,6 +126,32 @@ Look for headers:
 proxy_get_tls_fingerprints()
 ```
 
+**Interpreting TLS fingerprints**:
+
+Collect fingerprints for 3+ exchanges to the same host using the aggregate view:
+```
+proxy_list_tls_fingerprints(hostname_filter: "[target domain]")
+```
+
+Or per-exchange:
+```
+proxy_get_tls_fingerprints(exchange_id: "[exchange_1]")
+proxy_get_tls_fingerprints(exchange_id: "[exchange_2]")
+proxy_get_tls_fingerprints(exchange_id: "[exchange_3]")
+```
+
+Interpretation matrix:
+
+| JA3 across requests | JA4 across requests | Meaning |
+|---------------------|---------------------|---------|
+| Varies | Stable | **Chrome ClientHello passthrough** — real browser TLS. The proxy forwards Chrome's original ClientHello. Chrome randomizes cipher suite order per-connection (JA3 varies) but keeps the same extension set (JA4 stable). Target sees authentic browser fingerprint. |
+| Identical | Stable | **Proxy re-terminates TLS** — target sees the proxy's fingerprint, not Chrome's. HTTP-only scrapers will have the same non-browser fingerprint. Consider `proxy_set_fingerprint_spoof(preset: "chrome_136")` for HTTP clients. |
+| Varies | Varies | Anomalous — investigate. Possibly multiple clients or proxy instability. |
+
+**What this means for the scraper**:
+- If passthrough confirmed: Browser-based scrapers present authentic TLS. HTTP-only clients (got-scraping, curl, fetch) will still need their own TLS fingerprint spoofing via `proxy_set_fingerprint_spoof()`.
+- If proxy re-terminates: Both browser and HTTP clients present the proxy's fingerprint. Test with `proxy_set_fingerprint_spoof()` and document whether it resolves any blocks.
+
 ### Record baseline result
 
 ```
@@ -106,6 +161,9 @@ Tier 1 (Direct):
   Protection system: [None / Cloudflare / DataDome / Akamai / Other]
   Protection cookies: [list]
   Rate limit: [requests per minute if known]
+  TLS passthrough: [Yes / No]
+  JA3 behavior: [varies per-connection / identical]
+  JA4: [observed value]
 ```
 
 ---

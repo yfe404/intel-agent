@@ -31,6 +31,12 @@ proxy_get_exchange(exchange_id)
 
 Save the response body for searching. This is what Cheerio would see — no JavaScript has run.
 
+**Body truncation check**: `proxy_get_exchange()` returns a `bodyPreview` which may be truncated for large responses. Compare `bodySize` in the exchange metadata to the actual preview length.
+
+- If `bodySize` significantly exceeds the preview length: the preview only covers a portion of the HTML (often just `<head>` and beginning of `<body>`). **Searches of this preview are incomplete.**
+- To get the full body: use `proxy_get_session_exchange(session_id, exchange_id: exchange_id, include_body: true)` if a session was started with `capture_profile: "full"`.
+- If the full body is unavailable: note that raw HTML search results are **partial** and defer authoritative presence/absence decisions to the rendered DOM snapshot (step 2). A search returning 0 results on a truncated body does NOT mean the data is absent.
+
 ### 2. Get Rendered DOM
 
 Capture the accessibility tree after JavaScript has executed:
@@ -40,6 +46,14 @@ interceptor_chrome_devtools_snapshot()
 ```
 
 This represents the fully rendered page — what a real user sees. This is what a browser-based extractor would see.
+
+**If DevTools sidecar is unavailable (DEGRADED_MODE)**:
+
+This step cannot be performed — `interceptor_chrome_devtools_snapshot()` requires the sidecar. Consequences:
+- The "Browser required" classification cannot be confirmed
+- Data points not found in raw HTML or JSON blobs cannot be definitively classified
+- Mark such data points as **INCONCLUSIVE** rather than "Not Found"
+- The decision matrix below has additional rows for this scenario
 
 ### 3. Search for Each Data Point
 
@@ -171,6 +185,23 @@ The data point isn't visible in any of the three locations. It may require user 
 After each interaction, re-run the three-way test on the newly visible content and check proxy traffic for API calls that were triggered.
 
 **Record**: The required interaction sequence and whether an API call was triggered (if so, the API method is preferred).
+
+### Truncated Body + Rendered DOM Available
+
+When the body preview is truncated but the rendered DOM snapshot IS available:
+- Use the rendered DOM as the **authoritative** check for "is the data point on the page"
+- If found in rendered DOM: it exists on the page (method: Browser, but may also be extractable via Cheerio from the full HTML)
+- If NOT in rendered DOM: genuinely absent from the page at load time (may still require interaction — go to step above)
+- To determine if Cheerio works for DOM-found data points: retrieve the full body from the session via `proxy_get_session_exchange(session_id, exchange_id, include_body: true)` and re-check
+
+### Truncated Body + No Rendered DOM → INCONCLUSIVE
+
+When the body preview is truncated AND the rendered DOM snapshot is unavailable (DEGRADED_MODE):
+- The data point **cannot be confirmed absent** from the page
+- It may exist in the truncated portion of the HTML body
+- It may exist in the rendered DOM that could not be inspected
+- Mark as: **INCONCLUSIVE — body truncated, no snapshot available**
+- Recommendation: Re-run with `capture_profile: "full"` session and DevTools sidecar installed for definitive results
 
 ---
 
