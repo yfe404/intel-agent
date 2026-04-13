@@ -36,7 +36,7 @@ Protection system: [None / Cloudflare / DataDome / Akamai / Imperva / PerimeterX
 Minimum required proxy level: [Direct / Datacenter / Residential]
 Rate limits: [observed limits per endpoint]
   - [Endpoint]: [N] req/min → recommended safe rate: [M] req/min
-Stealth requirements: [stealthMode sufficient / TLS spoofing needed for HTTP clients / advanced measures needed]
+Stealth requirements: [cloakbrowser default sufficient / TLS spoofing needed for HTTP clients / advanced measures needed]
 Protection cookies: [list of protection cookies observed]
 
 
@@ -138,10 +138,12 @@ Notes:
 
 ## 6. RAW EVIDENCE
 
-Session: [session name if recorded]
-HAR export: [file path if exported]
-Screenshots: [list of screenshots taken during reconnaissance]
-Traffic summary: [number of exchanges captured]
+Session ID: [REQUIRED — returned by proxy_start with persistence_enabled: true]
+Session name: [intel-<target-domain>-<timestamp>]
+HAR export: [REQUIRED — path written by proxy_export_har with include_bodies: true]
+Screenshots: [list of screenshot file paths taken during reconnaissance]
+Traffic summary: [number of exchanges captured, total bytes written to session]
+Handshake metadata: [JA3/JA4 coverage — from proxy_get_session_handshakes]
 
 ================================================================
 END OF REPORT

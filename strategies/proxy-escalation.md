@@ -51,8 +51,8 @@ Check for 403, 429, 503, or redirect-to-challenge responses.
 
 **Challenge pages**:
 ```
-interceptor_chrome_devtools_snapshot()
-interceptor_chrome_devtools_screenshot()
+interceptor_browser_snapshot(target_id)
+interceptor_browser_screenshot(target_id)
 ```
 Look for:
 - Cloudflare "Checking your browser..." interstitial
@@ -63,7 +63,7 @@ Look for:
 
 **Protection cookies**:
 ```
-interceptor_chrome_devtools_list_cookies()
+interceptor_browser_list_cookies(target_id)
 ```
 
 Known protection cookie markers:
@@ -82,7 +82,7 @@ Known protection cookie markers:
 
 **Rate limit indicators**:
 
-Check response headers on API endpoints:
+Check response headers on API endpoints (header-only peek is fine here — ring buffer is sufficient):
 ```
 proxy_get_exchange(exchange_id)
 ```
@@ -125,10 +125,9 @@ proxy_set_upstream("[datacenter proxy URL]")
 Navigate to the target and observe:
 
 ```
-interceptor_chrome_devtools_navigate("[target URL]")
-humanizer_idle(target_id, 3000)
-interceptor_chrome_devtools_screenshot()
-interceptor_chrome_devtools_snapshot()
+interceptor_browser_navigate(target_id, url: "[target URL]", wait_until: "networkidle")
+interceptor_browser_screenshot(target_id)
+interceptor_browser_snapshot(target_id)
 ```
 
 Check traffic for blocks:
@@ -139,8 +138,7 @@ proxy_list_traffic(url_filter: "[target domain]")
 If API endpoints were discovered in Step 3, test them through the datacenter proxy:
 ```
 proxy_clear_traffic()
-interceptor_chrome_devtools_navigate("[API endpoint URL]")
-humanizer_idle(target_id, 2000)
+interceptor_browser_navigate(target_id, url: "[API endpoint URL]", wait_until: "networkidle")
 proxy_list_traffic()
 ```
 
@@ -176,18 +174,16 @@ proxy_set_upstream("[residential proxy URL]")
 Same procedure as Tier 2:
 
 ```
-interceptor_chrome_devtools_navigate("[target URL]")
-humanizer_idle(target_id, 3000)
-interceptor_chrome_devtools_screenshot()
-interceptor_chrome_devtools_snapshot()
+interceptor_browser_navigate(target_id, url: "[target URL]", wait_until: "networkidle")
+interceptor_browser_screenshot(target_id)
+interceptor_browser_snapshot(target_id)
 proxy_list_traffic(url_filter: "[target domain]")
 ```
 
 Test API endpoints through residential proxy:
 ```
 proxy_clear_traffic()
-interceptor_chrome_devtools_navigate("[API endpoint URL]")
-humanizer_idle(target_id, 2000)
+interceptor_browser_navigate(target_id, url: "[API endpoint URL]", wait_until: "networkidle")
 proxy_list_traffic()
 ```
 
@@ -218,16 +214,27 @@ This returns traffic to direct routing for any subsequent investigation.
 
 If the site returns different content based on location, or if you suspect geographic restrictions, test with proxies in different regions.
 
-Use per-host upstream proxy to target specific countries:
+Use per-host upstream proxy to target specific countries — **and relaunch the browser with matching `timezone` + `locale`** so server-side geo checks don't flag an IP/browser mismatch:
 
 ```
 proxy_set_host_upstream("[target domain]", "[country-specific proxy URL]")
+
+# Close current browser and relaunch with country-matched identity
+interceptor_browser_close(target_id)
+interceptor_browser_launch(
+    url: "[target URL]",
+    timezone: "Europe/Paris",   # match exit country
+    locale: "fr-FR"              # match exit country
+)
 ```
 
 Test and record per-country results. Then clean up:
 
 ```
+interceptor_browser_close(target_id)
 proxy_remove_host_upstream("[target domain]")
+# relaunch with defaults for the next tier
+interceptor_browser_launch(url: "[target URL]")
 ```
 
 **When to do geographic testing**:
@@ -254,12 +261,13 @@ proxy_remove_host_upstream("[target domain]")
 ### Additional factors
 
 **Stealth requirements**: If even residential proxies get blocked, check:
-- Is `stealthMode: true` enabled? (should always be)
-- Are humanizer interactions being used? (not raw DOM clicks)
-- Is there a JavaScript challenge that requires specific execution?
+- Stealth is built in (cloakbrowser source-level C++ patches — no `stealthMode` toggle). Make sure the browser was launched via `interceptor_browser_launch`, not an external Chrome.
+- Are humanizer interactions being used? (not raw Playwright instant clicks)
+- Is there a JavaScript challenge that requires specific execution? Run `interceptor_browser_list_console(target_id)` and look for challenge-script errors.
+- **Geo mismatch?** If using a country-specific upstream proxy, did you relaunch the browser with a matching `timezone` + `locale`? Server-side bot detection compares IP region vs browser timezone/locale — a mismatch alone can flag the session. See [Geographic Testing](#geographic-testing-if-needed).
 
 **TLS requirements**: If switching from browser to HTTP-only client for production:
-- Test with `proxy_set_fingerprint_spoof(preset: "chrome_136")` (only for HTTP clients, not browser sessions)
+- Test with `proxy_set_fingerprint_spoof(preset: "chrome_136")` (only for HTTP clients, not browser sessions — browser already matches real Chrome via cloakbrowser)
 - Compare results with and without TLS spoofing
 
 **Rate limit budget**: Even if a tier works, note rate limits. The report should include:
@@ -289,7 +297,7 @@ Rate limits:
   - Recommended safe rate: 40 req/min (product), 20 req/min (search)
 
 TLS/Stealth:
-  - Browser stealth mode: sufficient (no additional patches needed)
+  - Browser: cloakbrowser default stealth sufficient (no additional patches needed)
   - HTTP client: TLS spoofing recommended if switching to gotScraping
 ```
 

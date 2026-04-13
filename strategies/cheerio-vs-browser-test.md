@@ -33,13 +33,17 @@ Save the response body for searching. This is what Cheerio would see — no Java
 
 ### 2. Get Rendered DOM
 
-Capture the accessibility tree after JavaScript has executed:
+Capture the YAML ARIA tree after JavaScript has executed. Scope with `selector` to save tokens on large pages; use `mode: "ai"` if you intend to click elements found in the snapshot in a later step:
 
 ```
-interceptor_chrome_devtools_snapshot()
+interceptor_browser_snapshot(target_id)
+# or scoped:
+interceptor_browser_snapshot(target_id, selector: "main, article")
+# or with refs for downstream interaction:
+interceptor_browser_snapshot(target_id, mode: "ai")
 ```
 
-This represents the fully rendered page — what a real user sees. This is what a browser-based extractor would see.
+This represents the fully rendered page — what a real user sees. Match data-point search terms against the `role`, `name`, and `text` fields in the YAML output.
 
 ### 3. Search for Each Data Point
 
@@ -149,18 +153,18 @@ The data point isn't visible in any of the three locations. It may require user 
 1. **Scroll down** — Content may lazy-load:
    ```
    proxy_clear_traffic()
-   humanizer_scroll(target_id, "down", 2000)
-   humanizer_idle(target_id, 2000)
-   interceptor_chrome_devtools_snapshot()
+   humanizer_scroll(target_id, delta_y: 2000)
+   interceptor_browser_snapshot(target_id)
    proxy_list_traffic()
    ```
 
-2. **Click to reveal** — Content behind tabs, accordions, "show more" buttons:
+2. **Click to reveal** — Content behind tabs, accordions, "show more" buttons. Prefer locator-based clicks (role/text/label) over CSS selectors — proxy-mcp v2 auto-waits for visible + enabled + stable + in-view:
    ```
    proxy_clear_traffic()
-   humanizer_click(target_id, "[reveal button selector]")
-   humanizer_idle(target_id, 1000)
-   interceptor_chrome_devtools_snapshot()
+   humanizer_click(target_id, role: "button", name: "Show more")
+   # or: humanizer_click(target_id, text: "Read reviews")
+   # or: humanizer_click(target_id, selector: ".reveal-btn")   # fallback
+   interceptor_browser_snapshot(target_id)
    proxy_list_traffic()
    ```
 

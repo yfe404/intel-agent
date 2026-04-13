@@ -102,7 +102,7 @@ Complexity: Medium
 
 ## How It Works
 
-1. **Initialize** — Start MITM proxy, launch stealth Chrome, capture baseline traffic
+1. **Initialize** — Start MITM proxy with full-body persistence, launch stealth browser (cloakbrowser via proxy-mcp), capture baseline traffic
 2. **Scan for data points** — Search raw HTML, JSON blobs, and rendered DOM for each requested value
 3. **Sniff APIs** — Filter captured traffic for JSON endpoints, trigger interactions to discover more
 4. **Test protection** — Escalate through Direct → Datacenter → Residential proxy tiers
@@ -111,7 +111,7 @@ Complexity: Medium
 
 ## Requires
 
-- **proxy-mcp** — MITM traffic interception, stealth Chrome, DevTools bridge, humanizer
+- **proxy-mcp >=2.0.0** — MITM traffic interception with full-body on-disk persistence, cloakbrowser stealth browser, Playwright-driven locators, humanizer
 
 ## File Structure
 
