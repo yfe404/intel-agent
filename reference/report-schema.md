@@ -44,9 +44,9 @@ Protection system: [None / Cloudflare / DataDome / Akamai / Imperva / PerimeterX
 Minimum required proxy level: [Direct / Datacenter / Residential]
 Rate limits: [observed limits per endpoint]
   - [Endpoint]: [N] req/min → recommended safe rate: [M] req/min
-Stealth requirements: [stealthMode sufficient / TLS spoofing needed for HTTP clients / advanced measures needed]
+Stealth requirements: [cloakbrowser default sufficient / TLS spoofing needed for HTTP clients / advanced measures needed]
 TLS fingerprint verification:
-  - ClientHello passthrough: [Yes — Chrome fingerprint forwarded to target / No — proxy re-terminates TLS]
+  - ClientHello passthrough: [Yes — browser ClientHello forwarded to target / No — proxy re-terminates TLS]
   - JA3 behavior: [varies per-connection (Chrome randomization) / identical across requests (proxy fingerprint)]
   - JA4 observed: [value, e.g., "t13d1517h2_8daaf6152771_b6f405a00624"]
   - Implication: [e.g., "HTTP-only clients need proxy_set_fingerprint_spoof(chrome_136)" or "Browser sessions are transparent"]
@@ -151,13 +151,14 @@ Notes:
 
 ## 6. RAW EVIDENCE
 
-Capability mode: [FULL / DEGRADED — if degraded, list unavailable tools and skipped steps]
-Session: [session name] (ID: [session_id])
-HAR export: [file path]
-Capture profile: [preview / full]
-Screenshots: [list of screenshots taken, or "N/A — degraded mode (sidecar unavailable)"]
-Traffic summary: [number of exchanges captured]
-Steps skipped: [list any workflow steps skipped due to degraded mode or missing credentials, or "None"]
+Session ID: [REQUIRED — returned by proxy_start with persistence_enabled: true]
+Session name: [intel-<target-domain>-<timestamp>]
+HAR export: [REQUIRED — path written by proxy_export_har with include_bodies: true]
+Capture profile: [must be "full" for intel-agent runs]
+Screenshots: [list of screenshot file paths taken during reconnaissance]
+Traffic summary: [number of exchanges captured, total bytes written to session]
+Handshake metadata: [JA3/JA4 coverage — from proxy_get_session_handshakes]
+Steps skipped: [list any workflow steps skipped due to missing proxy credentials, or "None"]
 
 ================================================================
 END OF REPORT
@@ -173,14 +174,14 @@ END OF REPORT
 - **AVAILABLE**: Data point found reliably in at least one source with high confidence
 - **PARTIALLY AVAILABLE**: Data point found but with caveats (only on some pages, requires specific conditions, inconsistent presence)
 - **NOT FOUND**: Data point not discovered in any source during reconnaissance
-- **INCONCLUSIVE**: Data point search was limited by tool constraints (body preview truncated, DevTools sidecar unavailable). Cannot confirm presence or absence. The report notes what prevented a definitive check.
+- **INCONCLUSIVE**: Data point search was limited (e.g. all sources checked but element only appears after a specific interaction we did not trigger). Cannot confirm presence or absence. The report notes what prevented a definitive check.
 
 ### Confidence Levels
 
 - **High**: Data point clearly present, tested and verified, consistent across multiple checks
 - **Medium**: Data point found but structure may vary across pages, or only tested on limited samples
 - **Low**: Data point sometimes present, or extraction method is uncertain (e.g., relies on specific page state)
-- **Inconclusive**: Cannot determine — body preview was truncated and rendered DOM snapshot was unavailable. Re-run with `capture_profile: "full"` session and DevTools sidecar installed for definitive results.
+- **Inconclusive**: Cannot determine — element only surfaces after an interaction we did not trigger, or a CAPTCHA stopped traversal. Re-run with the missing interaction explicitly performed (or with valid proxy credentials for protection-blocked endpoints) for definitive results.
 
 ### Proxy Levels
 

@@ -31,13 +31,13 @@ Write scraping code, create Apify Actors, or run extraction at scale. For implem
 
 ### 1. Install proxy-mcp
 
-The skill requires [proxy-mcp](https://www.npmjs.com/package/proxy-mcp) (v1.1.0+) as an MCP server. One-liner:
+The skill requires [proxy-mcp](https://www.npmjs.com/package/proxy-mcp) **≥ 2.0.0** (cloakbrowser + Playwright) as an MCP server. One-liner:
 
 ```bash
 claude mcp add proxy-mcp -- npx -y proxy-mcp@latest
 ```
 
-Requires Node.js 22+.
+Requires Node.js ≥ 20. First launch downloads a ~200 MB stealth Chromium binary (cached afterwards).
 
 ### 2. Recommended permissions
 
@@ -79,11 +79,11 @@ what's the best way to get product name, price, stock status from https://shop.e
 
 ## How It Works
 
-1. **Initialize** — Start MITM proxy with full capture, launch stealth Chrome, auto-install DevTools sidecar if missing
-2. **Scan for data** — Search raw HTML (with full body decompression), JSON blobs, and rendered DOM for each data point
+1. **Initialize** — Start MITM proxy with full-body persistence; launch cloakbrowser (stealth Chromium, source-level fingerprint patches, humanize on by default) via Playwright
+2. **Scan for data** — Search raw HTML (full decompressed bodies), JSON blobs, web storage (local + session), and rendered ARIA snapshot for each data point
 3. **Full-page scroll** — Mandatory scroll to trigger lazy-loaded APIs (descriptions, reviews, carousels)
-4. **Sniff APIs** — Filter traffic for JSON endpoints, trigger interactions to discover pagination/search/filter APIs
-5. **Test protection** — Check Cloudflare/DataDome/Akamai indicators, verify TLS fingerprint passthrough, test proxy tiers
+4. **Sniff APIs** — Filter traffic for JSON endpoints, trigger interactions via locator-based clicks (`role+name` / `text` / `label`) to discover pagination/search/filter APIs
+5. **Test protection** — Check Cloudflare/DataDome/Akamai indicators, verify TLS fingerprint passthrough, test proxy tiers (paired locale + timezone for geo-specific upstreams)
 6. **Export** — Generate structured report + HAR file with full request/response bodies
 
 ## File Structure
@@ -104,5 +104,7 @@ intel-agent/
 ## Requires
 
 - **Claude Code** with MCP support
-- **proxy-mcp** v1.1.0+ — MITM traffic interception, stealth Chrome, DevTools bridge, humanizer, session recording
-- **Google Chrome** installed locally
+- **proxy-mcp** ≥ 2.0.0 — MITM traffic interception with full-body on-disk persistence, cloakbrowser stealth browser, Playwright-driven locators, humanizer, session recording
+- **Node.js** ≥ 20
+
+(cloakbrowser ships its own stealth Chromium binary — no separate Chrome install needed.)
