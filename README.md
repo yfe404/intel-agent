@@ -1,136 +1,110 @@
 # Intel Agent
 
-Reconnaissance skill that discovers **how** to extract specific data points from a website — without implementing the scraper.
+Reconnaissance skill for Claude Code that discovers **how** to extract data from any website — without writing a single line of scraping code.
 
-## What It Does
+Give it a URL and the data points you want. It launches a stealth browser through a MITM proxy, captures all traffic, sniffs APIs, tests protection levels, and returns a structured intelligence report with extraction strategies ranked by reliability.
 
-Give it a URL and a list of data points you want. It returns a structured intelligence report telling you:
+## Quick Start
 
-- **Where** each data point lives (API endpoint, embedded JSON, raw HTML, rendered DOM)
-- **How** to extract it (JSON path, CSS selector, accessibility tree location)
-- **What protection** the site uses and what proxy level you need
-- **Which method is best** for each data point (API > JSON-in-HTML > Cheerio > Browser)
+```
+recon https://www.alza.cz/some-product-d7752990.htm
+  data points: name, price, description, availability
+```
+
+The skill handles everything: Cloudflare challenge solving, lazy-content discovery via full-page scroll, TLS fingerprint verification, and HAR evidence export.
+
+## What You Get
+
+A structured report with:
+
+- **Per-data-point extraction methods** ranked API > JSON-in-HTML > Cheerio > Browser, with exact JSON paths, CSS selectors, and API endpoint specs
+- **Protection assessment** — Cloudflare/DataDome/Akamai detection, proxy tier requirements, TLS fingerprint analysis
+- **Discovered API endpoints** — full specs (URL, method, headers, auth, pagination, rate limits)
+- **Entity identifier mapping** — how the site's internal IDs relate to URLs and API parameters
+- **HAR evidence file** — full request/response bodies for every exchange captured during recon
 
 ## What It Does NOT Do
 
-- Write scraping code
-- Create Apify Actors
-- Run extraction at scale
+Write scraping code, create Apify Actors, or run extraction at scale. For implementation, hand off to the web-scraper skill.
 
-For implementation, use the [web-scraper](../web-scraper/) skill.
+## Setup
 
-## Installation
+### 1. Install proxy-mcp
 
-Add this directory to your Claude Code skills:
+The skill requires [proxy-mcp](https://www.npmjs.com/package/proxy-mcp) **≥ 2.0.0** (cloakbrowser + Playwright) as an MCP server. One-liner:
 
 ```bash
-# Clone or copy to your skills location
-cp -r intel-agent/ /path/to/your/skills/
+claude mcp add proxy-mcp -- npx -y proxy-mcp@latest
+```
+
+Requires Node.js ≥ 20. First launch downloads a ~200 MB stealth Chromium binary (cached afterwards).
+
+### 2. Recommended permissions
+
+The skill makes many MCP tool calls during a single recon session (traffic capture, browser control, humanizer interactions, session management). To avoid approving each one individually, add this to your project's `.claude/settings.local.json`:
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "mcp__proxy-mcp"
+    ]
+  }
+}
+```
+
+This auto-approves all proxy-mcp tools. All other tools still require manual approval.
+
+### 3. Install the skill
+
+Clone or copy this directory into your project:
+
+```bash
+git clone https://github.com/yfe404/intel-agent.git
 ```
 
 ## Usage
 
 ```
-recon https://shop.example.com/products
+# Full recon with specific data points
+recon https://www.example.com/product/123
+  data points: name, price, description, reviews, availability
 
+# Let the skill ask what you need
 intel report for https://news.example.com
-  data points: article title, author, publish date, body text, tags
 
-find how to extract product name, price, reviews, stock status from https://shop.example.com/widget-pro
-```
-
-## Example Output (Abbreviated)
-
-```
-================================================================
-INTEL REPORT: shop.example.com
-================================================================
-Target: https://shop.example.com/products/widget-pro
-Date: 2026-03-17 14:30 UTC
-Requested data points: product name, price, reviews, stock status
-
-## 1. SITE PROFILE
-Framework: Next.js 14 (SSR + CSR hybrid)
-Primary data source: Internal REST API + __NEXT_DATA__ JSON
-
-## 2. PROTECTION ASSESSMENT
-| Access Method | Direct | Datacenter | Residential |
-|--------------|--------|-----------|-------------|
-| Main page    | OK     | OK        | OK          |
-| Product API  | OK     | 403       | OK          |
-Minimum required: Residential proxy for API access
-
-## 3. DATA POINT ANALYSIS
-### 3.1 Product Name
-Status: AVAILABLE
-  1. JSON-in-HTML ← RECOMMENDED
-     Source: __NEXT_DATA__
-     JSON path: props.pageProps.product.name
-     Confidence: High
-
-### 3.2 Price
-Status: AVAILABLE
-  1. API ← RECOMMENDED
-     Endpoint: GET /api/v2/products/{id}
-     JSON path: product.price.current
-     Confidence: High
-
-### 3.3 Reviews
-Status: AVAILABLE
-  1. API ← RECOMMENDED
-     Endpoint: GET /api/v2/products/{id}/reviews?page={n}&limit=20
-     Confidence: High
-
-### 3.4 Stock Status
-Status: AVAILABLE
-  1. JSON-in-HTML ← RECOMMENDED
-     Source: __NEXT_DATA__
-     JSON path: props.pageProps.product.inStock
-     Confidence: High
-
-## 5. RECOMMENDED STRATEGY
-| Data Point    | Method       | Source           | Proxy    | Confidence |
-|--------------|--------------|------------------|----------|------------|
-| Product name | JSON-in-HTML | __NEXT_DATA__    | Direct   | High       |
-| Price        | API          | /api/v2/products | Resident.| High       |
-| Reviews      | API          | /api/v2/.../reviews | Resident.| High    |
-| Stock status | JSON-in-HTML | __NEXT_DATA__    | Direct   | High       |
-
-Complexity: Medium
-================================================================
+# Direct question format
+what's the best way to get product name, price, stock status from https://shop.example.com
 ```
 
 ## How It Works
 
-1. **Initialize** — Start MITM proxy with full-body persistence, launch stealth browser (cloakbrowser via proxy-mcp), capture baseline traffic
-2. **Scan for data points** — Search raw HTML, JSON blobs, and rendered DOM for each requested value
-3. **Sniff APIs** — Filter captured traffic for JSON endpoints, trigger interactions to discover more
-4. **Test protection** — Escalate through Direct → Datacenter → Residential proxy tiers
-5. **Rank methods** — For each data point, rank available extraction methods
-6. **Generate report** — Output structured intelligence report
-
-## Requires
-
-- **proxy-mcp >=2.0.0** — MITM traffic interception with full-body on-disk persistence, cloakbrowser stealth browser, Playwright-driven locators, humanizer
+1. **Initialize** — Start MITM proxy with full-body persistence; launch cloakbrowser (stealth Chromium, source-level fingerprint patches, humanize on by default) via Playwright
+2. **Scan for data** — Search raw HTML (full decompressed bodies), JSON blobs, web storage (local + session), and rendered ARIA snapshot for each data point
+3. **Full-page scroll** — Mandatory scroll to trigger lazy-loaded APIs (descriptions, reviews, carousels)
+4. **Sniff APIs** — Filter traffic for JSON endpoints, trigger interactions via locator-based clicks (`role+name` / `text` / `label`) to discover pagination/search/filter APIs
+5. **Test protection** — Check Cloudflare/DataDome/Akamai indicators, verify TLS fingerprint passthrough, test proxy tiers (paired locale + timezone for geo-specific upstreams)
+6. **Export** — Generate structured report + HAR file with full request/response bodies
 
 ## File Structure
 
 ```
 intel-agent/
-├── SKILL.md                          # Main workflow (start here)
-├── README.md                         # This file
-├── strategies/
-│   ├── cheerio-vs-browser-test.md    # Three-way extraction test procedure
-│   └── proxy-escalation.md           # Protection testing across proxy tiers
-└── reference/
-    └── report-schema.md              # Canonical output report format
+├── SKILL.md                              # Main workflow (~200 lines)
+├── README.md                             # This file
+├── reference/
+│   ├── report-schema.md                  # Report output format
+│   ├── tool-reference.md                 # Tool signatures, caveats, rules
+│   └── data-point-types.md              # Type classification & search strategies
+└── strategies/
+    ├── cheerio-vs-browser-test.md        # Three-way extraction test procedure
+    └── proxy-escalation.md              # Protection testing across proxy tiers
 ```
 
-## Relationship to web-scraper
+## Requires
 
-The **intel-agent** is the "what and where" — it discovers extraction paths.
-The **web-scraper** is the "how" — it implements the scraper.
+- **Claude Code** with MCP support
+- **proxy-mcp** ≥ 2.0.0 — MITM traffic interception with full-body on-disk persistence, cloakbrowser stealth browser, Playwright-driven locators, humanizer, session recording
+- **Node.js** ≥ 20
 
-Typical workflow:
-1. Run intel-agent to get the intelligence report
-2. Hand off to web-scraper: "scrape [data points] from [URL] using the intel report above"
+(cloakbrowser ships its own stealth Chromium binary — no separate Chrome install needed.)
