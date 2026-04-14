@@ -40,21 +40,17 @@ Save the response body for searching. This is what Cheerio would see — no Java
 
 ### 2. Get Rendered DOM
 
-Capture the accessibility tree after JavaScript has executed:
+Capture the YAML ARIA tree after JavaScript has executed. Scope with `selector` to save tokens on large pages; use `mode: "ai"` if you intend to click elements found in the snapshot in a later step:
 
 ```
-interceptor_chrome_devtools_snapshot()
+interceptor_browser_snapshot(target_id)
+# or scoped:
+interceptor_browser_snapshot(target_id, selector: "main, article")
+# or with refs for downstream interaction:
+interceptor_browser_snapshot(target_id, mode: "ai")
 ```
 
-This represents the fully rendered page — what a real user sees. This is what a browser-based extractor would see.
-
-**If DevTools sidecar is unavailable (DEGRADED_MODE)**:
-
-This step cannot be performed — `interceptor_chrome_devtools_snapshot()` requires the sidecar. Consequences:
-- The "Browser required" classification cannot be confirmed
-- Data points not found in raw HTML or JSON blobs cannot be definitively classified
-- Mark such data points as **INCONCLUSIVE** rather than "Not Found"
-- The decision matrix below has additional rows for this scenario
+This represents the fully rendered page — what a real user sees. Match data-point search terms against the `role`, `name`, and `text` fields in the YAML output.
 
 ### 3. Search for Each Data Point
 
@@ -164,18 +160,18 @@ The data point isn't visible in any of the three locations. It may require user 
 1. **Scroll down** — Content may lazy-load:
    ```
    proxy_clear_traffic()
-   humanizer_scroll(target_id, "down", 2000)
-   humanizer_idle(target_id, 2000)
-   interceptor_chrome_devtools_snapshot()
+   humanizer_scroll(target_id, delta_y: 2000)
+   interceptor_browser_snapshot(target_id)
    proxy_list_traffic()
    ```
 
-2. **Click to reveal** — Content behind tabs, accordions, "show more" buttons:
+2. **Click to reveal** — Content behind tabs, accordions, "show more" buttons. Prefer locator-based clicks (role/text/label) over CSS selectors — proxy-mcp v2 auto-waits for visible + enabled + stable + in-view:
    ```
    proxy_clear_traffic()
-   humanizer_click(target_id, "[reveal button selector]")
-   humanizer_idle(target_id, 1000)
-   interceptor_chrome_devtools_snapshot()
+   humanizer_click(target_id, role: "button", name: "Show more")
+   # or: humanizer_click(target_id, text: "Read reviews")
+   # or: humanizer_click(target_id, selector: ".reveal-btn")   # fallback
+   interceptor_browser_snapshot(target_id)
    proxy_list_traffic()
    ```
 
@@ -194,15 +190,6 @@ When the body preview is truncated but the rendered DOM snapshot IS available:
 - If found in rendered DOM: it exists on the page (method: Browser, but may also be extractable via Cheerio from the full HTML)
 - If NOT in rendered DOM: genuinely absent from the page at load time (may still require interaction — go to step above)
 - To determine if Cheerio works for DOM-found data points: use `proxy_search_session_bodies(session_id, text: "[value]", content_type_contains: "html")` to check if the value exists in the raw HTML body
-
-### Truncated Body + No Rendered DOM → INCONCLUSIVE
-
-When the body preview is truncated AND the rendered DOM snapshot is unavailable (DEGRADED_MODE):
-- The data point **cannot be confirmed absent** from the page
-- It may exist in the truncated portion of the HTML body
-- It may exist in the rendered DOM that could not be inspected
-- Mark as: **INCONCLUSIVE — body truncated, no snapshot available**
-- Recommendation: Re-run with `capture_profile: "full"` session and DevTools sidecar installed for definitive results
 
 ---
 

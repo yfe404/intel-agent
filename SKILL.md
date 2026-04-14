@@ -43,27 +43,27 @@ Six steps, executed sequentially. Each step builds on the previous.
 
 ### Step 1: Initialize & Capture Baseline Traffic
 
-```
-proxy_start(persistence_enabled: true, capture_profile: "full", session_name: "recon-[domain]-[YYYYMMDD]")
-interceptor_chrome_launch(url: "[target URL]", stealthMode: true)
-interceptor_chrome_devtools_attach(target_id)
-```
+Start the MITM proxy with **full-body persistence** (required — the default ring buffer caps bodies at 4 KB, which truncates `__NEXT_DATA__`, JSON-LD, and most API responses). Then launch the stealth browser and capture the baseline.
 
-Note: `proxy_start` with `persistence_enabled: true` auto-starts a session. A subsequent `proxy_session_start()` will return the existing session (not error), but the cleaner pattern is to pass `session_name` directly to `proxy_start`.
-
-**1a. Capability check** — Inspect the attach response:
-- If `"native-fallback mode"` warning: try `interceptor_chrome_devtools_pull_sidecar()`, then detach + re-attach
-- If sidecar available → **FULL_MODE**. If still unavailable → **DEGRADED_MODE** (`screenshot()` and `snapshot()` unavailable, Step 2c skipped)
-
-**1b. Capture baseline**:
 ```
-humanizer_idle(target_id, 3000)
-interceptor_chrome_devtools_screenshot()   # FULL_MODE only
+proxy_start(persistence_enabled: true, capture_profile: "full", session_name: "recon-[domain]-[YYYYMMDD]", max_disk_mb: 2048)
+interceptor_browser_launch(url: "[target URL]")
+interceptor_browser_screenshot(target_id)
 ```
 
-**Record**: Session name/ID, capability mode, page load status, loading behavior (SSR vs SPA), interstitials, framework indicators.
+Note: `proxy_start` with `persistence_enabled: true` auto-starts a session. A subsequent `proxy_session_start()` will return the existing session (not error), but the cleaner pattern is to pass `session_name` directly to `proxy_start`. Capture the returned `session_id` — every body-search and HAR-export call needs it.
 
-**Dismiss interstitials**: Use the rendered DOM snapshot (if FULL_MODE) or screenshot to identify cookie/popup selectors. `humanizer_click(target_id, "[accept selector]")` then `humanizer_idle(target_id, 1000)`. If the first selector fails, try alternatives. Multiple popups may appear sequentially (e.g., Cloudflare challenge then cookie consent).
+**Console signal** for site profiling: `interceptor_browser_list_console(target_id)` — React/hydration warnings → CSR SPA, network errors on `/api/*` → API-driven, clean console → static SSR.
+
+**Record**: Session name/ID, page load status, loading behavior (SSR vs SPA), interstitials, framework indicators.
+
+**Dismiss interstitials**: prefer locator-based clicks over CSS selectors — `humanizer_click` auto-waits for visible + enabled + stable + in-view. Try in this order:
+```
+humanizer_click(target_id, role: "button", name: "Accept all")
+humanizer_click(target_id, text: "I agree")
+humanizer_click(target_id, selector: ".cookie-accept")   # fallback
+```
+Multiple popups may appear sequentially (e.g., Cloudflare challenge then cookie consent) — repeat until the page is clean.
 
 ### Step 2: Scan Response Bodies for Data Points
 
@@ -71,59 +71,77 @@ For each data point, search three locations to determine extraction methods.
 
 #### 2a. Raw HTML body (Cheerio method)
 
+Use the **session-backed full-body path** — the ring buffer preview (`proxy_get_exchange`) truncates at 4 KB and will miss embedded JSON blobs.
+
 ```
-proxy_list_traffic(url_filter: "[target domain]")
-proxy_get_exchange(exchange_id)   # main HTML document
+proxy_search_session_bodies(session_id, query: "[data point search term]", hostname_contains: "[target domain]")
+proxy_list_traffic(url_filter: "[target domain]", method_filter: "GET")   # locate main HTML exchange id
+proxy_get_session_exchange(session_id, exchange_id: "[main HTML exchange id]", include_body: true)
 ```
 
-**Body truncation**: If `bodySize` >> preview length, use `proxy_search_session_bodies(session_id, text: "...", content_type_contains: "html")` to search the full decompressed body. For retrieving the complete body of a specific exchange, use `proxy_get_session_exchange(session_id, exchange_id, include_body: true)`. See `reference/tool-reference.md` Known Limitations. If body is truncated and no full body available, defer to Step 2c or mark **INCONCLUSIVE**.
-
-Search for data point values. If found → **Cheerio works**.
+If the search term is found in the raw HTML body → **Cheerio works**.
 
 #### 2b. JSON blobs in HTML (JSON-in-HTML method)
 
-Search raw HTML for: `application/ld+json`, `__NEXT_DATA__`, `__INITIAL_STATE__`, `__NUXT__`, `__APOLLO_STATE__`, `__RELAY_STORE__`. Parse and search for data points. If found → **JSON-in-HTML works** (preferred over Cheerio).
+Search the raw HTML body (or use `proxy_search_session_bodies` directly) for: `application/ld+json`, `__NEXT_DATA__`, `__INITIAL_STATE__`, `__NUXT__`, `__APOLLO_STATE__`, `__RELAY_STORE__`. Parse and search for data points. If found → **JSON-in-HTML works** (preferred over Cheerio).
 
 #### 2c. Rendered DOM (Browser method)
 
-**FULL_MODE**: `interceptor_chrome_devtools_snapshot()` — search for data points. If found only here → **Browser required**.
+```
+interceptor_browser_snapshot(target_id)
+# scoped (token-saver):
+interceptor_browser_snapshot(target_id, selector: "main, article, [itemtype*='Product']")
+# with refs (lets later humanizer_click reuse the locator):
+interceptor_browser_snapshot(target_id, mode: "ai")
+```
 
-**DEGRADED_MODE**: Skip. Mark unfound data points as **INCONCLUSIVE**.
+Output is YAML with `role`, `name`, `text` fields — match data-point search terms against those. If found in rendered DOM but NOT in raw HTML / JSON blobs / web storage → **Browser extraction required**.
 
-#### 2d. Decision matrix
+#### 2d. Web storage scan (often overlooked — SPAs hydrate from here)
 
-| Raw HTML? | JSON Blob? | Rendered DOM? | Method |
-|-----------|-----------|---------------|--------|
-| Yes | — | — | Cheerio |
-| — | Yes | — | JSON-in-HTML (preferred) |
-| Yes | Yes | — | JSON-in-HTML (preferred) or Cheerio |
-| No | No | Yes | Browser required |
-| No | No | No | Requires interaction → Step 2e |
-| Truncated | — | N/A (DEGRADED) | INCONCLUSIVE |
+```
+interceptor_browser_list_storage_keys(target_id, storage_type: "local")
+interceptor_browser_list_storage_keys(target_id, storage_type: "session")
+interceptor_browser_get_storage_value(target_id, storage_type: "local", item_id: "[item_id]")
+```
+
+If a search term is found in a storage value → **Browser extraction required, but the data is stable + parseable from storage keys** (record the key name).
+
+#### 2e. Decision matrix
+
+| Raw HTML? | JSON Blob? | Web Storage? | Rendered DOM? | Method |
+|---|---|---|---|---|
+| Yes | — | — | — | Cheerio |
+| — | Yes | — | — | JSON-in-HTML (preferred) |
+| Yes | Yes | — | — | JSON-in-HTML (preferred) or Cheerio |
+| No | No | Yes | — | Browser required; parseable from storage |
+| No | No | No | Yes | Browser required (DOM scrape) |
+| No | No | No | No | Requires interaction → Step 2f |
 
 See `strategies/cheerio-vs-browser-test.md` for the detailed procedure.
 
-#### 2e. Trigger interactions for missing data points
+#### 2f. Trigger interactions for missing data points
 
-For data points not found: `proxy_clear_traffic()`, interact (scroll, click), `humanizer_idle()`, then re-check DOM + traffic.
+For data points not found: `proxy_clear_traffic()`, interact (locator-based `humanizer_click`, `humanizer_scroll`), then re-check DOM + traffic. `humanizer_click` auto-waits for stability — no explicit idle needed before reading traffic.
 
-#### 2f. Full-page scroll capture (MANDATORY)
+#### 2g. Full-page scroll capture (MANDATORY)
 
 Scroll the entire page before API sniffing to capture lazy-loaded API calls:
 
 1. `proxy_clear_traffic()`
-2. Scroll 2-3x: `humanizer_scroll(target_id, delta_y: 800)` + `humanizer_idle(target_id, 1500)`
-3. **Mid-scroll visual check** (FULL_MODE only): `interceptor_chrome_devtools_screenshot()` — inspect for interstitials (CAPTCHA, cookie consent, PX challenge, modals). If an overlay is detected, dismiss it (`humanizer_click` on the dismiss selector, then `humanizer_idle`) before continuing. If a hard block (CAPTCHA) is detected, stop scrolling and proceed to Step 3 with traffic captured so far.
-4. Scroll 2-3x more: `humanizer_scroll(target_id, delta_y: 800)` + `humanizer_idle(target_id, 1500)`
-5. `humanizer_idle(target_id, 3000)` — let deferred calls complete
-6. `interceptor_chrome_devtools_screenshot()` + `interceptor_chrome_devtools_snapshot()` (FULL_MODE only) — final state
-7. `proxy_list_traffic()` — review newly triggered API calls
+2. Scroll 2-3x: `humanizer_scroll(target_id, delta_y: 800)`
+3. **Mid-scroll visual check**: `interceptor_browser_screenshot(target_id)` + `interceptor_browser_snapshot(target_id)` — inspect for interstitials (CAPTCHA, cookie consent, modals). Dismiss via `humanizer_click(role + name / text)`. If a hard block (CAPTCHA) is detected, stop scrolling and proceed to Step 3 with traffic captured so far.
+4. Scroll 2-3x more: `humanizer_scroll(target_id, delta_y: 800)`
+5. `interceptor_browser_screenshot(target_id)` + `interceptor_browser_snapshot(target_id)` — final state
+6. `proxy_list_traffic()` — review newly triggered API calls
 
 **MANDATORY** even if all data points already found — lazy APIs often provide better-structured data.
 
 ### Step 3: Sniff APIs
 
 #### 3a. Filter existing traffic
+
+The MITM proxy is the single source of truth — it sees strictly more than any in-browser network view (3rd-party domains, CONNECT tunnels, every TLS handshake):
 
 ```
 proxy_list_traffic(url_filter: "/api/")
@@ -132,16 +150,16 @@ proxy_list_traffic(url_filter: "/_next/data/")
 proxy_list_traffic(url_filter: "/wp-json/")
 proxy_list_traffic(url_filter: ".json")
 proxy_search_traffic(query: "application/json")
-interceptor_chrome_devtools_list_network(resource_types: ["xhr", "fetch"])
+proxy_search_session_bodies(session_id, query: "__typename", content_type_contains: "application/json")
 ```
 
 #### 3b. Trigger more traffic via interactions
 
-`proxy_clear_traffic()` → interact (pagination, search, filters, detail click, load more, sort) → `humanizer_idle()` → `proxy_list_traffic()`.
+`proxy_clear_traffic()` → interact (pagination, search, filters, detail click, load more, sort) via locator-based `humanizer_click` → `proxy_list_traffic()`. No explicit idle — `humanizer_click` auto-waits for stability.
 
 #### 3c. Inspect each discovered endpoint
 
-`proxy_get_exchange(exchange_id)` — Record: URL, method, headers, auth, body, response structure, pagination, data points covered, rate limits. See `reference/report-schema.md` Section 4 for the full endpoint template.
+Pull full request + response body from the session (not the 4 KB preview): `proxy_get_session_exchange(session_id, exchange_id, include_body: true)`. Record: URL, method, headers, auth, body, response structure, pagination, data points covered, rate limits. See `reference/report-schema.md` Section 4 for the full endpoint template.
 
 ### Step 4: Test Protection Levels
 
@@ -149,16 +167,16 @@ See `strategies/proxy-escalation.md` for the detailed procedure.
 
 **Tier 1 (Direct)**: Already tested. Check cookies, status codes, challenges:
 ```
-interceptor_chrome_devtools_list_cookies()
+interceptor_browser_list_cookies(target_id)
 proxy_search_traffic(query: "403")
 proxy_search_traffic(query: "challenge")
 ```
 
-**TLS verification**: `proxy_list_tls_fingerprints(hostname_filter: "[target domain]")`. JA3 varies + JA4 stable = Chrome passthrough. JA3 identical = proxy re-terminates. See `strategies/proxy-escalation.md` for interpretation matrix.
+**TLS verification**: `proxy_list_tls_fingerprints(hostname_filter: "[target domain]")`. JA3 varies + JA4 stable = browser ClientHello passthrough (cloakbrowser presents authentic Chrome fingerprint). JA3 identical = proxy re-terminates. See `strategies/proxy-escalation.md` for interpretation matrix.
 
-**Tier 2 (Datacenter)**: `proxy_set_upstream("[dc proxy]")` → navigate → compare to baseline.
+**Tier 2 (Datacenter)**: `proxy_set_upstream("[dc proxy]")` → `interceptor_browser_navigate(target_id, url, wait_until: "networkidle")` → compare to baseline. For country-specific proxies, also relaunch the browser with matching `timezone` + `locale` (IP/browser geo mismatch is a bot signal).
 
-**Tier 3 (Residential)**: `proxy_set_upstream("[res proxy]")` → navigate → compare.
+**Tier 3 (Residential)**: `proxy_set_upstream("[res proxy]")` → `interceptor_browser_navigate(target_id, url, wait_until: "networkidle")` → compare.
 
 **Clean up**: `proxy_clear_upstream()`.
 
@@ -181,11 +199,12 @@ Compile findings into the report format. See `reference/report-schema.md` for th
 
 **6a. Export session evidence**:
 ```
+proxy_get_session_handshakes(session_id)   # JA3/JA4 coverage for section 2
 proxy_session_stop()
-proxy_export_har(session_id: "[session_id]", output_file: "recon-[domain]-[YYYYMMDD].har", include_bodies: true)
+proxy_export_har(session_id: "[session_id]", file_path: "recon-[domain]-[YYYYMMDD].har", include_bodies: true)
 ```
 
-Include session name, ID, and HAR path in Section 6 of the report.
+Include session name, ID, HAR path, and handshake coverage in Section 6 of the report (all REQUIRED).
 
 ---
 
