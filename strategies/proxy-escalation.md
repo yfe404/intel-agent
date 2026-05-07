@@ -364,5 +364,5 @@ TLS/Stealth:
 ## Related
 
 - **Main workflow**: See `../SKILL.md` Step 4
-- **Anti-blocking layers**: See anti-blocking strategy in the web-scraper skill
-- **Proxy tool reference**: See proxy-tool-reference in the web-scraper skill
+- **Tool reference (canonical, co-located)**: See `../reference/tool-reference.md`
+- **Anti-blocking layers**: See `../../web-scraper/strategies/anti-blocking.md`

@@ -241,4 +241,4 @@ For reviews: check `proxy_list_traffic()` for a reviews API endpoint. If found, 
 ## Related
 
 - **Main workflow**: See `../SKILL.md` Step 2
-- **Proxy tool reference**: See proxy-tool-reference in the web-scraper skill
+- **Proxy tool reference**: See `../reference/tool-reference.md`

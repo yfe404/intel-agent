@@ -16,7 +16,9 @@ Activate when user requests:
 - "what's the best way to get [data] from [site]"
 - "how would I scrape [data points] from [URL]"
 
-**This skill does NOT implement scrapers.** It discovers extraction methods and outputs a structured intelligence report. For implementation, hand off to the web-scraper skill.
+**This skill does NOT implement scrapers.** It discovers extraction methods and outputs a structured intelligence report. For implementation, hand off to the **poc-agent** skill (builds + validates a minimal scraper from the report) or directly to **web-scraper** (productionization).
+
+**Terminology**: **Step N** = strictly sequential — each step builds on the previous and cannot be skipped.
 
 **References** (loaded on demand):
 - `reference/tool-reference.md` — Tool signatures, known limitations, important rules
@@ -52,6 +54,8 @@ interceptor_browser_screenshot(target_id)
 ```
 
 Note: `proxy_start` with `persistence_enabled: true` auto-starts a session. A subsequent `proxy_session_start()` will return the existing session (not error), but the cleaner pattern is to pass `session_name` directly to `proxy_start`. Capture the returned `session_id` — every body-search and HAR-export call needs it.
+
+**Navigation tip**: `interceptor_browser_navigate(target_id, url, wait_for_proxy_capture: true)` returns `matchedHostExchangeIds` — the exchange IDs for every target-host request fired during load. Pass those straight to `proxy_get_session_exchange(session_id, exchange_id, include_body: true)` in Step 2 instead of re-querying via `proxy_list_traffic`.
 
 **Console signal** for site profiling: `interceptor_browser_list_console(target_id)` — React/hydration warnings → CSR SPA, network errors on `/api/*` → API-driven, clean console → static SSR.
 
@@ -197,14 +201,29 @@ Per method include: source details (endpoint/selector/JSON path), required proxy
 
 Compile findings into the report format. See `reference/report-schema.md` for the complete structure.
 
+**Output contract — critical**: the report is **written to a file**, not pasted into the chat. The report body is long (hundreds of lines); dumping it into the conversation wastes the caller's context window and makes the handoff harder (downstream skills read the file by path, not by scrolling back through chat).
+
+- Write the full report to `./intel-<domain>-<YYYYMMDD>.md` via the Write tool.
+- The chat message at the end of the run is a **short status summary only**: report path, HAR path, session_id, data-point coverage count (e.g., "5 of 6 AVAILABLE"), any deviations or limitations, and the handoff line.
+- Do NOT paste the report body into chat. If the user explicitly says "show me the report in chat", that's a separate follow-up request after the file exists.
+
 **6a. Export session evidence**:
 ```
-proxy_get_session_handshakes(session_id)   # JA3/JA4 coverage for section 2
+# Read analysis resources (free aggregation — no manual counting of proxy_list_traffic):
+ReadMcpResourceTool("proxy://sessions/{session_id}/summary")    # §6 totals + §2 status breakdown
+ReadMcpResourceTool("proxy://sessions/{session_id}/findings")   # §2 rate-limit endpoints, §4 per-endpoint errors
+ReadMcpResourceTool("proxy://sessions/{session_id}/timeline")   # §2 block-onset minute (60s buckets)
+
+proxy_get_session_handshakes(session_id)   # JA3/JA4 coverage for §2
 proxy_session_stop()
 proxy_export_har(session_id: "[session_id]", file_path: "recon-[domain]-[YYYYMMDD].har", include_bodies: true)
 ```
 
-Include session name, ID, HAR path, and handshake coverage in Section 6 of the report (all REQUIRED).
+Include in Section 6 (all REQUIRED):
+- Session name, ID, HAR path, handshake coverage
+- From `summary`: total exchanges, avg duration, top hostnames, status code breakdown
+- From `findings`: high-error endpoints, slowest exchanges, host error rates (filter to target domain before quoting — excludes 3rd-party analytics/CDN noise)
+- From `timeline`: bucket where `errorCount` spikes → "protection engaged after ~N requests" signal for §2
 
 ---
 
@@ -212,9 +231,15 @@ Include session name, ID, HAR path, and handshake coverage in Section 6 of the r
 
 This skill is **pure discovery**. It does NOT write scraping code, create Actors, implement pagination, or deploy anything.
 
-**Handoff**: After generating the report:
+**Handoff**: After generating the report, pick one:
+
 ```
-Intelligence report complete. To implement a scraper based on these findings,
-use the web-scraper skill:
+# Recommended — small validated POC first
+Intelligence report complete. To build + validate a minimal POC scraper from
+these findings, use the poc-agent skill:
+  "build POC from intel report at /path/to/report.md"
+
+# Or skip straight to production
+To implement a production scraper, use the web-scraper skill:
   "scrape [data points] from [URL] using the intel report above"
 ```
