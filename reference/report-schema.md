@@ -34,14 +34,15 @@ Entity identifiers:
 
 ## 2. PROTECTION ASSESSMENT
 
-| Access Method | Direct | Datacenter | Residential |
-|--------------|--------|-----------|-------------|
-| Main page    | [OK/Blocked/Challenge] | [OK/Blocked/Challenge] | [OK/Blocked/Challenge] |
-| [Endpoint 1] | [OK/Blocked/429] | [OK/Blocked/429] | [OK/Blocked/429] |
-| [Endpoint 2] | [OK/Blocked/429] | [OK/Blocked/429] | [OK/Blocked/429] |
+Active proxy/IP: [describe what was used — e.g., "Apify residential, country=US" or "Direct (no upstream)"]
+
+| Access Method | Status | Blocked? | Challenge | Notes |
+|--------------|--------|----------|-----------|-------|
+| Main page    | [200/403/...] | [No/Yes] | [None / JS / CAPTCHA / Interstitial] | [cookies set, redirects, etc.] |
+| [Endpoint 1] | [200/403/429] | [No/Yes] | [None/...] | [...] |
+| [Endpoint 2] | [200/403/429] | [No/Yes] | [None/...] | [...] |
 
 Protection system: [None / Cloudflare / DataDome / Akamai / Imperva / PerimeterX / Custom]
-Minimum required proxy level: [Direct / Datacenter / Residential]
 Rate limits: [observed limits per endpoint]
   - [Endpoint]: [N] req/min → recommended safe rate: [M] req/min
 Stealth requirements: [cloakbrowser default sufficient / TLS spoofing needed for HTTP clients / advanced measures needed]
@@ -51,6 +52,11 @@ TLS fingerprint verification:
   - JA4 observed: [value, e.g., "t13d1517h2_8daaf6152771_b6f405a00624"]
   - Implication: [e.g., "HTTP-only clients need proxy_set_fingerprint_spoof(chrome_136)" or "Browser sessions are transparent"]
 Protection cookies: [list of protection cookies observed]
+
+Proxy/IP hypothesis (only if blocking observed under the active config):
+  - Suspected cause: [datacenter IP on residential-only site / wrong-country IP on geo-locked site / API requires browser-warmed cookies / IP reputation / etc.]
+  - Operator action: [re-run with residential exit / matching-country IP / browser-warmup → cookie replay / lower request rate / etc.]
+  - Confidence: [High / Medium / Low — based on observed signal]
 
 
 ## 3. DATA POINT ANALYSIS
@@ -73,7 +79,6 @@ Methods (ranked best → worst):
      - [For Cheerio]: Selector: [CSS selector]
      - [For Browser]: Snapshot location: [accessibility tree path]
      - [For Browser]: Required interaction: [none / scroll / click selector]
-     - Required proxy level: [Direct / Datacenter / Residential]
      - Confidence: [High / Medium / Low]
 
   2. [Fallback method]
@@ -132,10 +137,10 @@ Data points covered: [list of data points this endpoint provides]
 
 Summary:
 
-| Data Point | Best Method | Endpoint/Source | Proxy Level | Confidence |
-|-----------|-------------|-----------------|-------------|------------|
-| [name]   | [API/JSON/Cheerio/Browser] | [endpoint or source] | [Direct/DC/Residential] | [H/M/L] |
-| [name]   | [API/JSON/Cheerio/Browser] | [endpoint or source] | [Direct/DC/Residential] | [H/M/L] |
+| Data Point | Best Method | Endpoint/Source | Confidence |
+|-----------|-------------|-----------------|------------|
+| [name]   | [API/JSON/Cheerio/Browser] | [endpoint or source] | [H/M/L] |
+| [name]   | [API/JSON/Cheerio/Browser] | [endpoint or source] | [H/M/L] |
 
 Complexity estimate: [Low / Medium / High]
   - [Low]: All data from single API or JSON-in-HTML, no auth, no rate limits
@@ -174,7 +179,6 @@ Session timeline (from `proxy://sessions/{id}/timeline`, 60s buckets):
   - Block-onset observation: [e.g., "errorCount jumped from 0 to 7/12 at bucket 3 → ~N requests in ~3 minutes"]
 
 Handshake metadata: [JA3/JA4 coverage — from proxy_get_session_handshakes]
-Steps skipped: [list any workflow steps skipped due to missing proxy credentials, or "None"]
 
 ================================================================
 END OF REPORT
@@ -198,12 +202,6 @@ END OF REPORT
 - **Medium**: Data point found but structure may vary across pages, or only tested on limited samples
 - **Low**: Data point sometimes present, or extraction method is uncertain (e.g., relies on specific page state)
 - **Inconclusive**: Cannot determine — element only surfaces after an interaction we did not trigger, or a CAPTCHA stopped traversal. Re-run with the missing interaction explicitly performed (or with valid proxy credentials for protection-blocked endpoints) for definitive results.
-
-### Proxy Levels
-
-- **Direct**: No upstream proxy needed — the method works from any IP
-- **Datacenter**: Requires at minimum a datacenter proxy
-- **Residential**: Requires a residential proxy for reliable access
 
 ### Complexity Estimates
 
@@ -235,4 +233,3 @@ END OF REPORT
 
 - **Main workflow**: See `../SKILL.md` Step 6
 - **Cheerio vs Browser test**: See `../strategies/cheerio-vs-browser-test.md`
-- **Proxy escalation**: See `../strategies/proxy-escalation.md`

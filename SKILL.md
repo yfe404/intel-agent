@@ -1,6 +1,6 @@
 ---
 name: intel-agent
-description: Reconnaissance tool that takes a target URL and desired data points, tests extraction methods (API, JSON-in-HTML, Cheerio, Browser) via proxy-mcp traffic interception, tests protection levels, and outputs a structured intelligence report with per-data-point strategies.
+description: Reconnaissance tool that takes a target URL and desired data points, tests extraction methods (API, JSON-in-HTML, Cheerio, Browser) via proxy-mcp traffic interception, observes protection signal under the active proxy/IP config, and outputs a structured intelligence report with per-data-point strategies.
 license: MIT
 ---
 
@@ -25,7 +25,6 @@ Activate when user requests:
 - `reference/data-point-types.md` — Type classification and search strategies per type
 - `reference/report-schema.md` — Report output format
 - `strategies/cheerio-vs-browser-test.md` — Cheerio vs Browser extraction test procedure
-- `strategies/proxy-escalation.md` — Three-tier protection testing procedure
 
 ---
 
@@ -165,31 +164,45 @@ proxy_search_session_bodies(session_id, query: "__typename", content_type_contai
 
 Pull full request + response body from the session (not the 4 KB preview): `proxy_get_session_exchange(session_id, exchange_id, include_body: true)`. Record: URL, method, headers, auth, body, response structure, pagination, data points covered, rate limits. See `reference/report-schema.md` Section 4 for the full endpoint template.
 
-### Step 4: Test Protection Levels
+### Step 4: Assess Protection Under Active Config
 
-See `strategies/proxy-escalation.md` for the detailed procedure.
+Assume the active proxy/IP is the right one for this target — don't escalate
+through datacenter/residential tiers. Single-pass: characterize what the site
+returns under the current config, and surface a proxy/IP **hypothesis** only
+when blocking is observed.
 
-**Tier 1 (Direct)**: Already tested. Check cookies, status codes, challenges:
+**Observe under the active config**:
 ```
-interceptor_browser_list_cookies(target_id)
-proxy_search_traffic(query: "403")
-proxy_search_traffic(query: "challenge")
+interceptor_browser_list_cookies(target_id)             # bot-management cookies (_abck, bm_sz, datadome, cf_clearance, ...)
+proxy_search_traffic(query: "403")                      # blocked responses
+proxy_search_traffic(query: "challenge")                # interstitials / JS challenges
+proxy_search_traffic(query: "captcha")
 ```
 
-**TLS verification**: `proxy_list_tls_fingerprints(hostname_filter: "[target domain]")`. JA3 varies + JA4 stable = browser ClientHello passthrough (cloakbrowser presents authentic Chrome fingerprint). JA3 identical = proxy re-terminates. See `strategies/proxy-escalation.md` for interpretation matrix.
+For each access method tested in Steps 1–3 (main page, each API endpoint),
+record: status, blocked? (status ≥ 400 or interstitial served), cookies set,
+challenge type if any.
 
-**Tier 2 (Datacenter)**: `proxy_set_upstream("[dc proxy]")` → `interceptor_browser_navigate(target_id, url, wait_until: "networkidle")` → compare to baseline. For country-specific proxies, also relaunch the browser with matching `timezone` + `locale` (IP/browser geo mismatch is a bot signal).
+**TLS verification**: `proxy_list_tls_fingerprints(hostname_filter: "[target domain]")`.
+- JA3 varies + JA4 stable → browser ClientHello passthrough (cloakbrowser presents authentic Chrome fingerprint).
+- JA3 identical across all connections → an upstream proxy re-terminates TLS (your real fingerprint is the proxy's, not Chrome's). For HTTP-only clients downstream, recommend `proxy_set_fingerprint_spoof(chrome_*)`.
 
-**Tier 3 (Residential)**: `proxy_set_upstream("[res proxy]")` → `interceptor_browser_navigate(target_id, url, wait_until: "networkidle")` → compare.
+**Proxy/IP hypothesis (record only if blocking was observed)**:
 
-**Clean up**: `proxy_clear_upstream()`.
+When the page loads but a specific endpoint 403s, or the page itself returns
+a challenge, do not re-test through a different proxy tier — flag the
+suspected cause for the human operator instead. Common patterns:
 
-| Direct | Datacenter | Residential | Minimum Required |
-|--------|-----------|-------------|-----------------|
-| OK | OK | OK | Direct |
-| Blocked | OK | OK | Datacenter proxy |
-| Blocked | Blocked | OK | Residential proxy |
-| Blocked | Blocked | Blocked | Residential + stealth + CAPTCHA solving |
+| Symptom | Likely cause | Operator action |
+|---|---|---|
+| 403 on every endpoint, page itself blocked | Datacenter IP on a site that requires residential, OR wrong-country IP on a geo-locked site | Re-run intel-agent with a residential / matching-country exit |
+| Page OK, specific API 403 | API requires session cookies set by browser load (not raw HTTP) OR API geo-locked stricter than page | Browser warmup → cookie replay; or test API directly with same-country IP |
+| Cookies present, periodic 429 / rate-limit | IP reputation is fine, but rate budget low | Lower request rate or rotate session per N requests |
+| TLS JA3 identical across calls | Upstream proxy re-terminating | Either disable proxy mid-stream or use `proxy_set_fingerprint_spoof` |
+
+**Out of scope**: actually swapping proxies and re-running the recon.
+intel-agent reports under one configuration. Tier swapping is an operator
+decision based on the hypothesis above.
 
 ### Step 5: Rank Extraction Methods
 
