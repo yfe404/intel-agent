@@ -97,8 +97,7 @@ intel-agent/
 │   ├── tool-reference.md                 # Tool signatures, caveats, rules
 │   └── data-point-types.md              # Type classification & search strategies
 └── strategies/
-    ├── cheerio-vs-browser-test.md        # Three-way extraction test procedure
-    └── proxy-escalation.md              # Protection testing across proxy tiers
+    └── cheerio-vs-browser-test.md        # Three-way extraction test procedure
 ```
 
 ## Requires
