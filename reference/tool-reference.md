@@ -1,3 +1,5 @@
+<!-- Canonical source. Copies exist in web-scraper/reference/tool-reference.md and poc-agent/reference/tool-reference.md — keep all three in sync when updating. -->
+
 # Tool Reference & Known Limitations
 
 Reference material for the intel-agent skill. Consult when you need tool signatures, caveats, or usage guidance.
@@ -63,21 +65,26 @@ Targets **proxy-mcp ≥ 2.0.0** (cloakbrowser + Playwright). For older proxy-mcp
 ### Browser Inspection
 | Tool | Purpose |
 |------|---------|
-| `interceptor_browser_navigate(target_id, url, wait_until?)` | Navigate; `wait_until: "networkidle"` for SPA hydration settle |
+| `interceptor_browser_navigate(target_id, url, wait_until?, wait_for_proxy_capture?, timeout_ms?)` | Navigate; `wait_until: "networkidle"` for SPA hydration settle; `wait_for_proxy_capture: true` returns `matchedHostExchangeIds` |
 | `interceptor_browser_screenshot(target_id, file_path?, full_page?)` | Screenshot (saves to disk if `file_path` given) |
-| `interceptor_browser_snapshot(target_id, selector?, mode?)` | YAML ARIA tree (role/name/text); `selector` scopes the tree; `mode: "ai"` adds refs |
+| `interceptor_browser_snapshot(target_id, selector?, mode?)` | YAML ARIA tree (role/name/text); `selector` scopes the tree; `mode: "ai"` adds refs for later locator reuse |
 | `interceptor_browser_list_console(target_id, types?, text_filter?)` | Buffered console messages since launch — useful for site profiling |
-| `interceptor_browser_list_cookies(target_id, domain_filter?)` | Browser context cookies |
+| `interceptor_browser_list_cookies(target_id, domain_filter?, full?)` | Browser context cookies; `full: true` returns full value inline (20k cap), avoids round-trips via `get_cookie` |
+| `interceptor_browser_get_cookie(target_id, cookie_id)` | Single cookie by id |
 | `interceptor_browser_list_storage_keys(target_id, storage_type)` | local/sessionStorage key listing |
 | `interceptor_browser_get_storage_value(target_id, storage_type, item_id)` | Full storage value |
+| `interceptor_browser_list_network_fields(target_id)` | List per-request network fields |
+| `interceptor_browser_get_network_field(target_id, field_id)` | Get a specific network field |
 | `interceptor_browser_close(target_id)` | Close the browser instance |
 
 ### Human Interaction
 | Tool | Purpose |
 |------|---------|
-| `humanizer_click(target_id, selector? \| role+name? \| text? \| label? \| x+y?)` | Click; prefer locator forms — auto-waits for visible + enabled + stable + in-view |
-| `humanizer_type(target_id, text, wpm?, error_rate?)` | Type with realistic timing (WPM + bigram + typo model) |
-| `humanizer_scroll(target_id, delta_y, delta_x?, duration_ms?)` | Smooth eased scroll (delta_y in pixels, positive = down) |
+| `humanizer_click(target_id, selector? \| role+name? \| text? \| label? \| x+y?, timeout_ms?)` | Click; prefer locator forms — auto-waits for visible + enabled + stable + in-view. Default `timeout_ms: 15000`. |
+| `humanizer_type(target_id, text, delay_ms?)` | Type with cloakbrowser-patched `page.keyboard.type` (CDP-trusted Shift handling for uppercase/symbols) |
+| `humanizer_scroll(target_id, delta_y, delta_x?)` | Single wheel event (delta_y in pixels, positive = down) |
+| `humanizer_move(target_id, x, y)` | Move cursor to coordinates |
+| `humanizer_idle(target_id, duration_ms?)` | Explicit idle (only for idle-detection defeat — navigate/click already auto-wait) |
 
 (cloakbrowser already humanizes mouse/keyboard dispatch by default; the `humanizer_*` timing profile layers on top. Explicit idle waits are unnecessary — `humanizer_click` auto-waits for stability and `interceptor_browser_navigate(..., wait_until: "networkidle")` waits for XHR settle.)
 
@@ -89,14 +96,34 @@ Targets **proxy-mcp ≥ 2.0.0** (cloakbrowser + Playwright). For older proxy-mcp
 | `proxy_clear_upstream()` | Remove all upstream proxies |
 | `proxy_list_tls_fingerprints(hostname_filter)` | List unique JA3/JA4 fingerprints across traffic |
 | `proxy_get_tls_fingerprints(exchange_id)` | Get TLS fingerprints for a specific exchange |
+| `proxy_list_fingerprint_presets()` | List available impit fingerprint presets (chrome_*, firefox_*, safari_*, okhttp3/4/5) |
 | `proxy_set_fingerprint_spoof(preset)` | Outbound TLS+HTTP/2 spoofing (impit) — for non-browser clients only |
+| `proxy_set_ja3_spoof(...)` | **DEPRECATED** — use `proxy_set_fingerprint_spoof` with a preset |
+| `proxy_enable_server_tls_capture(enabled)` | Enable JA3S server fingerprint capture (off by default) |
+| `proxy_check_fingerprint_runtime()` | Self-test that the active preset matches what targets actually see |
 
-### Session Management
+### Session Management & Replay
 | Tool | Purpose |
 |------|---------|
 | `proxy_session_stop()` | Stop recording and finalize session |
+| `proxy_list_sessions()` | List persisted sessions |
+| `proxy_get_session(session_id)` | Session manifest |
 | `proxy_export_har(session_id, file_path, include_bodies: true)` | Export session as HAR (REQUIRED for Raw Evidence section) |
+| `proxy_import_har(file_path)` | Import an external HAR into the session store (for replay of prior captures) |
+| `proxy_replay_session(session_id, mode: "dry_run"\|"execute", limit?, offset?, hostname_contains?, url_contains?, status_code?, exchange_ids?, target_base_url?, timeout_ms?)` | Replay persisted requests; `dry_run` reports without firing, `execute` re-sends through the active proxy config |
+| `proxy_session_recover(session_id)` | Recover a session after a truncated write |
 | `proxy_get_session_handshakes(session_id)` | JA3/JA4/JA3S handshake metadata coverage report |
+
+### MCP Resources (read via `ReadMcpResourceTool`, not tool calls)
+
+| Resource URI | Payload |
+|--------------|---------|
+| `proxy://traffic/summary` | Method/status/hostname breakdown + top JA3/JA4 across live traffic |
+| `proxy://sessions/{id}/summary` | Session totals (exchanges, avg duration, top hostnames, status/method breakdowns) |
+| `proxy://sessions/{id}/timeline` | 60s-bucket histogram of requests + error counts (for rate-limit onset detection) |
+| `proxy://sessions/{id}/findings` | Top error endpoints, slowest exchanges, host error rates |
+| `proxy://browser/primary` | Most recently activated browser target |
+| `proxy://browser/targets` | All active browser targets |
 
 ---
 

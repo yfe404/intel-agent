@@ -156,7 +156,23 @@ Session name: [intel-<target-domain>-<timestamp>]
 HAR export: [REQUIRED — path written by proxy_export_har with include_bodies: true]
 Capture profile: [must be "full" for intel-agent runs]
 Screenshots: [list of screenshot file paths taken during reconnaissance]
-Traffic summary: [number of exchanges captured, total bytes written to session]
+
+Session summary (from `proxy://sessions/{id}/summary`):
+  - Total exchanges: [N]
+  - Avg duration: [N ms]
+  - Top hostnames: [{hostname, count} × up to 10 — useful for CDN/analytics attribution]
+  - Status code breakdown: [{200: N, 403: N, 429: N, ...}]
+  - Method breakdown: [{GET: N, POST: N, ...}]
+
+Session findings (from `proxy://sessions/{id}/findings`, filtered to target domain):
+  - High-error endpoints: [{endpoint, errors} × up to 10]
+  - Slowest exchanges: [{exchangeId, duration_ms, url} × up to 10]
+  - Host error rates: [{hostname, total, errors, errorRate} — target domain row primary]
+
+Session timeline (from `proxy://sessions/{id}/timeline`, 60s buckets):
+  - Buckets: [{bucketStart, count, errorCount} series]
+  - Block-onset observation: [e.g., "errorCount jumped from 0 to 7/12 at bucket 3 → ~N requests in ~3 minutes"]
+
 Handshake metadata: [JA3/JA4 coverage — from proxy_get_session_handshakes]
 Steps skipped: [list any workflow steps skipped due to missing proxy credentials, or "None"]
 
