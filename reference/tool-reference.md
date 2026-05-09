@@ -4,7 +4,7 @@
 
 Reference material for the intel-agent skill. Consult when you need tool signatures, caveats, or usage guidance.
 
-Targets **proxy-mcp ≥ 2.0.0** (cloakbrowser + Playwright). For older proxy-mcp (1.x, `interceptor_chrome_*` + CDP sidecar), use the `v1` branch of this skill.
+Targets **proxy-mcp ≥ 2.0.0** (cloakbrowser + Playwright). For older proxy-mcp (1.x, `interceptor_chrome_*` + CDP sidecar), use the `v1` branch of this skill. Camoufox tools (anti-detect Firefox, Step 1 hard-target fallback) require **proxy-mcp ≥ 3.0.0**.
 
 ---
 
@@ -46,6 +46,10 @@ Targets **proxy-mcp ≥ 2.0.0** (cloakbrowser + Playwright). For older proxy-mcp
 | `proxy_start(persistence_enabled: true, capture_profile: "full", session_name, max_disk_mb: 2048)` | Start MITM proxy with full-body on-disk capture (REQUIRED for intel-agent) |
 | `proxy_session_start(session_name, capture_profile)` | Start session separately (not needed if `proxy_start` was called with `persistence_enabled: true`) |
 | `interceptor_browser_launch(url, headless?, humanize?, timezone?, locale?, viewport_width?, viewport_height?)` | Launch cloakbrowser (stealth Chromium, source-level fingerprint patches, humanize on by default) |
+| `interceptor_camoufox_launch({ headless?, disable_coop?, os?, humanize?, locale?, geoip?, ... })` | Hard-target fallback (proxy-mcp ≥ 3.0.0): anti-detect Firefox via Playwright WebSocket. Returns `wsUrl` + `playwright_connect`. Caller drives pages with `firefox.connect(wsUrl)` outside MCP — `interceptor_browser_*` and `humanizer_*` are NOT bound to camoufox targets. |
+| `interceptor_camoufox_info(target_id)` | Get the wsUrl + ready-to-paste TS / Python `firefox.connect()` snippets |
+| `interceptor_camoufox_list()` | List active camoufox instances |
+| `interceptor_camoufox_close(target_id)` | Stop the launcher; remove temp launcher dir + NSS profile |
 
 ### Traffic Analysis (Live Buffer — header peek)
 | Tool | Purpose |
@@ -124,6 +128,7 @@ Targets **proxy-mcp ≥ 2.0.0** (cloakbrowser + Playwright). For older proxy-mcp
 | `proxy://sessions/{id}/findings` | Top error endpoints, slowest exchanges, host error rates |
 | `proxy://browser/primary` | Most recently activated browser target |
 | `proxy://browser/targets` | All active browser targets |
+| `proxy://camoufox/targets` | Active camoufox instances with their wsUrl + fingerprint details (proxy-mcp ≥ 3.0.0) |
 
 ---
 
@@ -136,3 +141,4 @@ Targets **proxy-mcp ≥ 2.0.0** (cloakbrowser + Playwright). For older proxy-mcp
 - For geographic testing, relaunch the browser with matching `timezone` + `locale` when switching upstream proxy countries — IP geo vs browser geo mismatch is a bot signal
 - Use `proxy_search_session_bodies()` to search inside response/request bodies (not `proxy_search_traffic()` which only searches previews, and not `proxy_query_session()` which only searches metadata)
 - TLS fingerprint spoofing (`proxy_set_fingerprint_spoof`) is for non-browser HTTP clients only — cloakbrowser already presents an authentic Chrome fingerprint at the source level
+- Reach for camoufox only when cloakbrowser is detected. If you start with camoufox you lose `interceptor_browser_*` and `humanizer_*` for that target — drive Playwright yourself via `firefox.connect(wsUrl)` and skip the snapshot/click/scroll steps below. Host requirements (camoufox path only): `pip install "camoufox[geoip]"`, `python3 -m camoufox fetch`, and NSS `certutil` (`libnss3-tools`/`nss-tools`/`brew install nss`)

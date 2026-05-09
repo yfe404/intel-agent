@@ -31,13 +31,13 @@ Write scraping code, create Apify Actors, or run extraction at scale. For implem
 
 ### 1. Install proxy-mcp
 
-The skill requires [proxy-mcp](https://www.npmjs.com/package/proxy-mcp) **≥ 2.0.0** (cloakbrowser + Playwright) as an MCP server. One-liner:
+The skill requires [proxy-mcp](https://www.npmjs.com/package/proxy-mcp) **≥ 2.0.0** (cloakbrowser + Playwright) as an MCP server. The optional camoufox hard-target fallback (Step 1) needs **proxy-mcp ≥ 3.0.0**. One-liner:
 
 ```bash
 claude mcp add proxy-mcp -- npx -y proxy-mcp@latest
 ```
 
-Requires Node.js ≥ 20. First launch downloads a ~200 MB stealth Chromium binary (cached afterwards).
+Requires Node.js ≥ 20. First launch downloads a ~200 MB stealth Chromium binary (cached afterwards). To enable the camoufox path: `pip install "camoufox[geoip]" && python3 -m camoufox fetch && sudo apt install libnss3-tools` (or the macOS / Fedora equivalents).
 
 ### 2. Recommended permissions
 
@@ -79,7 +79,7 @@ what's the best way to get product name, price, stock status from https://shop.e
 
 ## How It Works
 
-1. **Initialize** — Start MITM proxy with full-body persistence; launch cloakbrowser (stealth Chromium, source-level fingerprint patches, humanize on by default) via Playwright
+1. **Initialize** — Start MITM proxy with full-body persistence; launch cloakbrowser (stealth Chromium, source-level fingerprint patches, humanize on by default) via Playwright. For hard targets that block Chromium fingerprints (Cloudflare Turnstile, Akamai bot manager), fall back to camoufox (anti-detect Firefox via `firefox.connect(wsUrl)`) — proxy-mcp ≥ 3.0.0
 2. **Scan for data** — Search raw HTML (full decompressed bodies), JSON blobs, web storage (local + session), and rendered ARIA snapshot for each data point
 3. **Full-page scroll** — Mandatory scroll to trigger lazy-loaded APIs (descriptions, reviews, carousels)
 4. **Sniff APIs** — Filter traffic for JSON endpoints, trigger interactions via locator-based clicks (`role+name` / `text` / `label`) to discover pagination/search/filter APIs
