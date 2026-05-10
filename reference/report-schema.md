@@ -45,7 +45,7 @@ Active proxy/IP: [describe what was used — e.g., "Apify residential, country=U
 Protection system: [None / Cloudflare / DataDome / Akamai / Imperva / PerimeterX / Custom]
 Rate limits: [observed limits per endpoint]
   - [Endpoint]: [N] req/min → recommended safe rate: [M] req/min
-Stealth requirements: [cloakbrowser default sufficient / TLS spoofing needed for HTTP clients / advanced measures needed]
+Stealth requirements: [cloakbrowser default sufficient / TLS spoofing needed for HTTP clients / camoufox (Firefox) needed for hard targets / advanced measures needed]
 TLS fingerprint verification:
   - ClientHello passthrough: [Yes — browser ClientHello forwarded to target / No — proxy re-terminates TLS]
   - JA3 behavior: [varies per-connection (Chrome randomization) / identical across requests (proxy fingerprint)]
@@ -162,11 +162,12 @@ Notes:
 
 ## 6. RAW EVIDENCE
 
+Browser path: [cloakbrowser (default) / camoufox (Firefox fallback)]
 Session ID: [REQUIRED — returned by proxy_start with persistence_enabled: true]
 Session name: [intel-<target-domain>-<timestamp>]
 HAR export: [REQUIRED — path written by proxy_export_har with include_bodies: true]
 Capture profile: [must be "full" for intel-agent runs]
-Screenshots: [list of screenshot file paths taken during reconnaissance]
+Screenshots: [list of screenshot file paths taken during reconnaissance — N/A on camoufox path]
 
 Session summary (from `proxy://sessions/{id}/summary`):
   - Total exchanges: [N]
