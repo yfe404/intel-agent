@@ -187,6 +187,38 @@ challenge type if any.
 - JA3 varies + JA4 stable → browser ClientHello passthrough (cloakbrowser presents authentic Chrome fingerprint).
 - JA3 identical across all connections → an upstream proxy re-terminates TLS (your real fingerprint is the proxy's, not Chrome's). For HTTP-only clients downstream, recommend `proxy_set_fingerprint_spoof(chrome_*)`.
 
+**Cookie JA4-binding probe** — record whether the WAF ties its session
+cookie to the originating TLS fingerprint. This decides whether the
+deployed actor's Tier 1 (impit) call needs to use the same impit
+`browser` profile as the cloak warmup, or whether any profile works.
+
+Procedure: after the browser run mints session cookies (datadome /
+incap_ses / cf_clearance / etc.), have the consumer replay one
+representative GET against the same target with two distinct impit
+profiles (`browser=firefox` and `browser=chrome`) **on the same
+warmed jar**. Compare the responses:
+
+- Both profiles return real-page bytes with the required data point
+  paths resolving → **`tier1_cookie_replay: cross-engine`**. JA4 is
+  not part of the WAF's session-binding hash. The consumer can
+  use any impit profile.
+- Only the matched profile (the engine that minted the cookie)
+  returns real-page bytes; the mismatched profile returns a
+  challenge / fresh `cid` / 200 with an interstitial body →
+  **`tier1_cookie_replay: matched-only`**. The consumer's Tier 1
+  client must use the same impit profile as the cloak warmup, or
+  the cascade can never ride Tier 1. DataDome is the canonical
+  example.
+- Could not test (Tier 1 unreachable for unrelated reasons; only
+  one profile ever attempted) → **`tier1_cookie_replay: untested`**.
+
+Record the observation in §2 of the report and propagate the
+recommendation through to Phase 3 (`PathPolicy.browser` for the
+WAF-fronted host must match the warmup engine when
+`matched-only`). See the toolkit reference
+`skills/_shared/references/treat-as-success.md` for the underlying
+mechanism.
+
 **Proxy/IP hypothesis (record only if blocking was observed)**:
 
 When the page loads but a specific endpoint 403s, or the page itself returns
@@ -196,7 +228,7 @@ suspected cause for the human operator instead. Common patterns:
 | Symptom | Likely cause | Operator action |
 |---|---|---|
 | 403 on every endpoint, page itself blocked | Datacenter IP on a site that requires residential, OR wrong-country IP on a geo-locked site | Re-run intel-agent with a residential / matching-country exit |
-| Page OK, specific API 403 | API requires session cookies set by browser load (not raw HTTP) OR API geo-locked stricter than page | Browser warmup → cookie replay; or test API directly with same-country IP |
+| Page OK, specific API 403 | API requires session cookies set by browser load (not raw HTTP) OR API geo-locked stricter than page | Browser warmup → cookie replay. If the WAF JA4-binds its session cookie (run the cookie JA4-binding probe above), the consumer's Tier 1 (impit) `browser` profile must match the warmup engine. Test API directly with same-country IP if not session-gated. |
 | Cookies present, periodic 429 / rate-limit | IP reputation is fine, but rate budget low | Lower request rate or rotate session per N requests |
 | TLS JA3 identical across calls | Upstream proxy re-terminating | Either disable proxy mid-stream or use `proxy_set_fingerprint_spoof` |
 

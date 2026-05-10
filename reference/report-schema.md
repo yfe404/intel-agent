@@ -52,6 +52,12 @@ TLS fingerprint verification:
   - JA4 observed: [value, e.g., "t13d1517h2_8daaf6152771_b6f405a00624"]
   - Implication: [e.g., "HTTP-only clients need proxy_set_fingerprint_spoof(chrome_136)" or "Browser sessions are transparent"]
 Protection cookies: [list of protection cookies observed]
+Tier 1 cookie replay: [matched-only / cross-engine / untested]
+  - Probe: replay one representative GET against the warmed jar with both impit `browser=firefox` and `browser=chrome` (see SKILL.md "Cookie JA4-binding probe").
+  - matched-only → consumer's `PathPolicy.browser` MUST match the cloak warmup engine; mismatched profile mints fresh CID and serves challenge.
+  - cross-engine  → any impit profile works; `PathPolicy.browser` only needs to match the cloak engine choice (Imperva/Linux-Chrome avoidance), not the impit profile.
+  - untested      → could not run the probe (Tier 1 unreachable for other reasons, or only one profile attempted).
+  - Evidence: [byte counts / fresh-CID header presence / status code from each profile]
 
 Proxy/IP hypothesis (only if blocking observed under the active config):
   - Suspected cause: [datacenter IP on residential-only site / wrong-country IP on geo-locked site / API requires browser-warmed cookies / IP reputation / etc.]
