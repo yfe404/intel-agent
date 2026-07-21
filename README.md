@@ -34,7 +34,10 @@ Write scraping code, create Apify Actors, or run extraction at scale. For implem
 The skill requires [proxy-mcp](https://www.npmjs.com/package/proxy-mcp) **≥ 2.0.0** (cloakbrowser + Playwright) as an MCP server. The optional camoufox hard-target fallback (Step 1) needs **proxy-mcp ≥ 3.0.0**. One-liner:
 
 ```bash
+# For Claude Code
 claude mcp add proxy-mcp -- npx -y proxy-mcp@latest
+# For OpenCode
+opencode mcp add proxy-mcp -- npx -y proxy-mcp@latest
 ```
 
 Requires Node.js ≥ 20. First launch downloads a ~200 MB stealth Chromium binary (cached afterwards). To enable the camoufox path: `pip install "camoufox[geoip]" && python3 -m camoufox fetch && sudo apt install libnss3-tools` (or the macOS / Fedora equivalents).
@@ -53,6 +56,19 @@ The skill makes many MCP tool calls during a single recon session (traffic captu
 }
 ```
 
+or `opencode.json` for OpenCode:
+
+```json
+{
+  "mcp": {
+    "proxy-mcp": {
+      "type": "local",
+      "command": ["npx", "-y", "proxy-mcp@latest"]
+    }
+  }
+}
+```
+
 This auto-approves all proxy-mcp tools. All other tools still require manual approval.
 
 ### 3. Install the skill
@@ -61,6 +77,11 @@ Clone or copy this directory into your project:
 
 ```bash
 git clone https://github.com/yfe404/intel-agent.git
+```
+
+Alternatively, you can also put the skill into your global config directory to use it in any project (.clade/skills is recognized by OpenCode as well):
+```bash
+mkdir -p ~/.claude/skills && git clone https://github.com/yfe404/intel-agent.git ~/.claude/skills/intel-agent
 ```
 
 ## Usage
